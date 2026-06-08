@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@keyframes selected-node-glow {
+  0% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 2px #ffffff, 0 0 8px 1px rgba(255, 255, 255, 0.8), 0 0 16px 3px var(--glow-color, rgba(56, 189, 248, 0.6));
+  }
+  50% {
+    transform: scale(1.22);
+    box-shadow: 0 0 0 2.5px #ffffff, 0 0 16px 2px rgba(255, 255, 255, 0.95), 0 0 28px 6px var(--glow-color, rgba(56, 189, 248, 0.95));
+  }
+  100% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 2px #ffffff, 0 0 8px 1px rgba(255, 255, 255, 0.8), 0 0 16px 3px var(--glow-color, rgba(56, 189, 248, 0.6));
+  }
+}
+
+.animate-selected-node {
+  animation: selected-node-glow 1.8s infinite ease-in-out;
+}
+
+@keyframes slide-in-right {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

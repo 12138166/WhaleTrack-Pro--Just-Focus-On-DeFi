@@ -1,0 +1,6 @@
+{
+  "name": "WhaleTrack Pro",
+  "description": "Real-time cryptocurrency whale telemetry, wallet behavior analytics, and AI-powered market liquidity impact simulator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
