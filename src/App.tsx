@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion } from "motion/react";
 import { 
   Terminal, 
   Activity, 
@@ -16,7 +17,11 @@ import {
   Info,
   Calendar,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Coins,
+  LayoutGrid,
+  FileText,
+  ArrowRight
 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, YAxis } from "recharts";
 import { CURATED_WHALES } from "./data";
@@ -29,6 +34,8 @@ import { AddressHoldingsHub } from "./components/AddressHoldingsHub";
 import { CryptoPolicySection } from "./components/CryptoPolicySection";
 import { InvestorReactionMonitor } from "./components/InvestorReactionMonitor";
 import { MarketChartsTracker } from "./components/MarketChartsTracker";
+import { DeFiLlamaProtocolsHub } from "./components/DeFiLlamaProtocolsHub";
+import { ChainConsensusEducationalDeck } from "./components/ChainConsensusEducationalDeck";
 
 // Generate realistic starting sequence representing fluctuations in preceding 15 minutes of trading activity
 const generateInitialMockHistory = (basePrice: number, change24h: number): number[] => {
@@ -113,6 +120,28 @@ export default function App() {
   const [selectedWallet, setSelectedWallet] = useState<WhaleWallet>(CURATED_WHALES[0]);
   const [lastTickAsset, setLastTickAsset] = useState<{ symbol: string; direction: "up" | "down" } | null>(null);
 
+  // Load and persist user's chosen theme (Deep Space dark mode vs. Terminal High-Contrast)
+  const [themeMode, setThemeMode] = useState<"space" | "terminal">(() => {
+    try {
+      const saved = localStorage.getItem("whaletrack_theme");
+      return (saved === "terminal" || saved === "space") ? saved : "space";
+    } catch {
+      return "space";
+    }
+  });
+
+  const toggleTheme = () => {
+    setThemeMode(prev => {
+      const next = prev === "space" ? "terminal" : "space";
+      try {
+        localStorage.setItem("whaletrack_theme", next);
+      } catch (e) {
+        // Safe lock
+      }
+      return next;
+    });
+  };
+
   // Maintain sliding price histories for 15-minute momentum sparkline visualizer
   const [tickerHistories, setTickerHistories] = useState<{ [key: string]: number[] }>(() => {
     const initial: { [key: string]: number[] } = {};
@@ -177,8 +206,8 @@ export default function App() {
     endDate: "2026-05-31"
   });
 
-  // Global View Mode state - 'all' renders full cohesive workspace grid, while specific IDs render singular focus mode
-  const [activeSection, setActiveSection] = useState<string>("all");
+  // Global View Mode state - 'overview' renders console hub launcher, while specific IDs render singular focus modes
+  const [activeSection, setActiveSection] = useState<string>("overview");
 
   // Reference hooks
   const wsRef = useRef<WebSocket | null>(null);
@@ -367,7 +396,14 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">
+    <motion.div 
+      initial={false}
+      animate={{
+        backgroundColor: themeMode === "terminal" ? "#000000" : "#020617"
+      }}
+      transition={{ duration: 0.45, ease: "easeInOut" }}
+      className={`min-h-screen ${themeMode === "terminal" ? "theme-terminal" : "theme-deep-space"} text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950`}
+    >
       
       {/* 1. Global Streaming Exchange Ticker Strip */}
       <div className="bg-slate-950 border-b border-slate-900 px-4 py-2 text-xs font-mono flex items-center justify-between gap-4 overflow-hidden">
@@ -423,23 +459,66 @@ export default function App() {
       <header className="bg-slate-950 p-5 border-b border-slate-900 shadow-xl" id="cyber-header">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-cyan-600 to-indigo-600 rounded-lg text-slate-950 shadow-lg shadow-cyan-500/10">
-              <Terminal className="h-6 w-6 text-slate-100" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-[9px] font-mono tracking-widest text-emerald-400 font-bold uppercase">QUANT TELEMETRY v3.25</span>
+          <div className="flex items-center justify-between w-full md:w-auto">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-gradient-to-br from-cyan-600 to-indigo-600 rounded-lg text-slate-950 shadow-lg shadow-cyan-500/10">
+                <Terminal className="h-6 w-6 text-slate-100" />
               </div>
-              <h1 className="text-xl font-mono font-black tracking-tighter text-slate-100 flex items-center gap-1.5">
-                WHALETRACK <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400">PRO</span>
-              </h1>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[9px] font-mono tracking-widest text-emerald-400 font-bold uppercase">QUANT TELEMETRY v3.25</span>
+                </div>
+                <h1 className="text-xl font-mono font-black tracking-tighter text-slate-100 flex items-center gap-1.5">
+                  WHALETRACK <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400">PRO</span>
+                </h1>
+              </div>
+            </div>
+
+            {/* Mobile-only toggle element */}
+            <div className="md:hidden">
+              <button
+                type="button"
+                id="theme-toggle-btn-mobile"
+                onClick={toggleTheme}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-[10px] font-mono font-bold text-slate-300 cursor-pointer select-none active:scale-95 transition-all"
+                title="Toggle visual style"
+              >
+                {themeMode === "space" ? "🌌 SPACE" : "📟 TERM"}
+              </button>
             </div>
           </div>
 
-          {/* Quick Metrics stats block */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-900 w-full md:w-auto">
+          {/* Desktop Controls & Quick Metrics Grid container */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+            {/* Desktop Theme Switch Panel */}
+            <div className="hidden md:flex items-center gap-2 pr-2">
+              <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest font-extrabold select-none">COSMETIC:</span>
+              <button
+                type="button"
+                id="theme-toggle-btn-desktop"
+                onClick={toggleTheme}
+                className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-705 rounded-lg text-[10.5px] font-mono text-slate-200 hover:text-white font-bold cursor-pointer select-none transition-all shadow-md group"
+                title="Toggle Dashboard Theme Style"
+              >
+                {themeMode === "space" ? (
+                  <>
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 shadow shadow-cyan-400/50"></span>
+                    <span>Deep Space Dark</span>
+                    <span className="text-[8px] text-slate-500 group-hover:text-cyan-400 font-normal ml-0.5">📟 Switch</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 shadow shadow-emerald-400/50 animate-pulse"></span>
+                    <span className="text-emerald-400 font-bold">Terminal High-Contrast</span>
+                    <span className="text-[8px] text-emerald-600 font-normal ml-0.5">🌌 Switch</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Quick Metrics stats block */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-900 w-full md:w-auto">
             <div className="px-3 py-1 font-mono">
               <span className="text-[9px] text-slate-500 block uppercase">24h Monitored vol</span>
               <span className="text-xs text-slate-300 font-bold">${(aggregate24hVol / 1000000000).toFixed(1)}B USD</span>
@@ -460,6 +539,7 @@ export default function App() {
             </div>
           </div>
 
+          </div>
         </div>
       </header>
 
@@ -476,36 +556,51 @@ export default function App() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button 
-              onClick={() => scrollToId("onchain-accumulation-hub")} 
-              className="text-xs font-mono text-cyan-405 hover:text-cyan-300 hover:underline flex-shrink-0 font-bold cursor-pointer"
+              onClick={() => {
+                setActiveSection("hub");
+                scrollToId("global-time-horizon-picker");
+              }} 
+              className="text-xs font-mono text-cyan-400 hover:text-cyan-300 hover:underline flex-shrink-0 font-bold cursor-pointer"
             >
               SCAN TOP 200 NODES 📊
             </button>
-            <span className="text-slate-800 text-xs hidden sm:inline">•</span>
+            <span className="text-slate-850 text-xs hidden sm:inline">•</span>
             <button 
-              onClick={() => scrollToId("whale-alert-feed")} 
-              className="text-xs font-mono text-cyan-400 hover:text-cyan-300 hover:underline flex-shrink-0 font-bold cursor-pointer"
+              onClick={() => {
+                setActiveSection("streams");
+                scrollToId("global-time-horizon-picker");
+              }} 
+              className="text-xs font-mono text-emerald-400 hover:text-emerald-300 hover:underline flex-shrink-0 font-bold cursor-pointer"
             >
-              LAUNCH INGESTION feed 🔮
+              LAUNCH INGESTION FEED 🔮
             </button>
-            <span className="text-slate-800 text-xs hidden sm:inline">•</span>
+            <span className="text-slate-850 text-xs hidden sm:inline">•</span>
             <button 
-              onClick={() => scrollToId("crypto-us-policy-analysis")} 
-              className="text-xs font-mono text-amber-505 hover:text-amber-405 hover:underline flex-shrink-0 font-bold cursor-pointer"
+              onClick={() => {
+                setActiveSection("policy");
+                scrollToId("global-time-horizon-picker");
+              }} 
+              className="text-xs font-mono text-amber-400 hover:text-amber-300 hover:underline flex-shrink-0 font-bold cursor-pointer"
             >
               POLICY ANALYSIS 🏛️
             </button>
-            <span className="text-slate-800 text-xs hidden sm:inline">•</span>
+            <span className="text-slate-850 text-xs hidden sm:inline">•</span>
             <button 
-              onClick={() => scrollToId("market-volume-charts-section")} 
-              className="text-xs font-mono text-violet-400 hover:text-violet-300 hover:underline flex-shrink-0 font-bold cursor-pointer"
+              onClick={() => {
+                setActiveSection("charts");
+                scrollToId("global-time-horizon-picker");
+              }} 
+              className="text-xs font-mono text-rose-400 hover:text-rose-300 hover:underline flex-shrink-0 font-bold cursor-pointer"
             >
               VOLUME & PEGS 📈
             </button>
-            <span className="text-slate-800 text-xs hidden sm:inline">•</span>
+            <span className="text-slate-850 text-xs hidden sm:inline">•</span>
             <button 
-              onClick={() => scrollToId("investor-reaction-monitor-section")} 
-              className="text-xs font-mono text-rose-450 hover:text-rose-400 hover:underline flex-shrink-0 font-bold cursor-pointer"
+              onClick={() => {
+                setActiveSection("sentiment");
+                scrollToId("global-time-horizon-picker");
+              }} 
+              className="text-xs font-mono text-violet-400 hover:text-violet-300 hover:underline flex-shrink-0 font-bold cursor-pointer"
             >
               INVESTOR SENTIMENT 👥
             </button>
@@ -655,21 +750,23 @@ export default function App() {
               </div>
             </div>
             <div className="text-[9px] font-mono bg-slate-950 px-2.5 py-1 rounded border border-slate-850 text-slate-400">
-              CURRENT INTERFACE MODE: <span className="text-cyan-400 font-bold uppercase">{activeSection === "all" ? "UNIFIED CORE GRID" : `FOCUS ENGINE [${activeSection.toUpperCase()}]`}</span>
+              CURRENT INTERFACE MODE: <span className="text-cyan-400 font-bold uppercase">{activeSection === "overview" ? "SYSTEM CONSOLE HOME" : `FOCUS ENGINE [${activeSection.toUpperCase()}]`}</span>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-1.5 pt-0.5">
             {[
-              { id: "all", name: "All Operations", icon: Layers, accent: "border-cyan-500/80 bg-cyan-950/20 text-cyan-400 font-black" },
-              { id: "streams", name: "Inflow Streams", icon: Activity, accent: "border-emerald-500/50 bg-emerald-950/25 text-emerald-300 font-bold" },
+              { id: "overview", name: "Command Console", icon: LayoutGrid, accent: "border-cyan-500 bg-cyan-950/20 text-cyan-400 font-black font-extrabold shadow shadow-cyan-500/20" },
+              { id: "streams", name: "Inflow Streams", icon: Activity, accent: "border-emerald-500/50 bg-emerald-950/25 text-emerald-300 font-bold font-extrabold shadow shadow-emerald-500/10" },
               { id: "matrix", name: "Whale Matrix", icon: Database, accent: "border-cyan-500/50 bg-cyan-950/25 text-cyan-300 font-bold" },
               { id: "explorer", name: "Entity Explorer", icon: Search, accent: "border-indigo-500/50 bg-indigo-950/25 text-indigo-300 font-bold" },
               { id: "hub", name: "Holdings Hub", icon: Globe, accent: "border-purple-500/50 bg-purple-950/25 text-purple-300 font-bold" },
+              { id: "protocols", name: "DeFi Top 1000", icon: Coins, accent: "border-orange-500/50 bg-orange-950/25 text-orange-300 font-bold" },
               { id: "charts", name: "Volume & Pegs", icon: TrendingUp, accent: "border-rose-500/50 bg-rose-950/25 text-rose-300 font-bold" },
               { id: "policy", name: "Policy Desk", icon: Cpu, accent: "border-amber-500/50 bg-amber-950/25 text-amber-300 font-bold" },
               { id: "sentiment", name: "Investor Sentiment", icon: Zap, accent: "border-violet-500/50 bg-violet-950/25 text-violet-300 font-bold" },
-              { id: "simulator", name: "Slippage Simulator", icon: AlertTriangle, accent: "border-sky-500/50 bg-sky-950/25 text-sky-300 font-bold" }
+              { id: "simulator", name: "Slippage Simulator", icon: AlertTriangle, accent: "border-sky-500/50 bg-sky-950/25 text-sky-300 font-bold" },
+              { id: "glossary", name: "Consensus Whitepaper", icon: FileText, accent: "border-teal-500/60 bg-teal-950/35 text-teal-300 font-black font-extrabold shadow shadow-teal-550/20" }
             ].map((tab) => {
               const TabIcon = tab.icon;
               const isSelected = activeSection === tab.id;
@@ -682,7 +779,7 @@ export default function App() {
                   }}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[11px] font-mono transition-all uppercase cursor-pointer ${
                     isSelected 
-                      ? tab.accent + " scale-[1.02] shadow-lg shadow-black/40" 
+                      ? tab.accent + " scale-[1.02] shadow-lg" 
                       : "bg-slate-950 border-slate-850 text-slate-400 hover:text-slate-200 hover:border-slate-700"
                   }`}
                 >
@@ -697,106 +794,364 @@ export default function App() {
         {/* 🔮 MULTI-PERSPECTIVE WORKSPACE ROUTER */}
         <div id="workspace-dynamic-viewport" className="space-y-6">
 
-          {/* 1. SECTOR INDEX: Live Inflow Streams Ledger */}
-          {(activeSection === "all" || activeSection === "streams") && (
-            <div id="streams-view-card" className="space-y-1">
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2 border-b-0 font-mono text-[10px] text-slate-400">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span className="font-bold tracking-wider uppercase text-slate-350">
-                    SECTOR INDEX 01: Blockchain Inflow & Ingestion Logs
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {activeSection === "streams" ? (
-                    <button
-                      onClick={() => setActiveSection("all")}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-400"
-                    >
-                      <Minimize2 className="h-3 w-3 text-amber-400" />
-                      <span>EXIT FOCUS MODE (SHOW ALL)</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setActiveSection("streams");
-                        scrollToId("global-time-horizon-picker");
-                      }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-850 hover:border-slate-700 bg-slate-950 hover:text-cyan-400 font-mono text-[9px] cursor-pointer text-slate-500"
-                      title="Enter exclusive focus view"
-                    >
-                      <Maximize2 className="h-2.5 w-2.5" />
-                      <span>FOCUS VIEW ⛶</span>
-                    </button>
-                  )}
+          {/* 💻 CONSOLE HUB OVERVIEW DIRECTORY (BENTO COMMAND CENTER) */}
+          {activeSection === "overview" && (
+            <div className="space-y-6">
+              
+              {/* Core Hero System Diagnostics */}
+              <div className="bg-slate-900 border border-slate-850 rounded-xl p-5 relative overflow-hidden shadow-xl">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="space-y-1 text-center md:text-left">
+                    <div className="flex items-center justify-center md:justify-start gap-2">
+                      <LayoutGrid className="h-5 w-5 text-cyan-400" />
+                      <h2 className="text-sm font-bold font-mono uppercase text-slate-200 tracking-wider">
+                        WhaleTrack Pro Operational Console Hub
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-400 max-w-4xl leading-relaxed">
+                      Select any focus sandbox module below to monitor live blockchain inflows, analyze node concentration matrices, read federal policy decks, or model massive liquidity sell-offs. Toggle exclusive views with zero global layout clutter.
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-400">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <span>SESSION SYSTEM ENGINE LIVE</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Optimised Adaptive Grid Spanning: Gives STREAMS 8 columns (wider) and MATRIX 4 columns under standard view */}
-              {activeSection === "all" ? (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  <div className="lg:col-span-8 h-full">
-                    <WhaleAlertTicker 
-                      onSelectAddress={handleSelectAddress}
-                      currentPrices={prices}
-                      tickers={tickers}
-                    />
-                  </div>
-                  <div className="lg:col-span-4 h-full">
-                    {/* Compact embedded preview header inside sub-column */}
-                    <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-3 py-1.5 border-b-0 font-mono text-[9px] text-slate-500">
-                      <span>ON-CHAIN COHORT MATRIX</span>
-                      <button
-                        onClick={() => setActiveSection("matrix")}
-                        className="text-[8px] uppercase underline text-cyan-400 hover:text-cyan-300"
-                      >
-                        FOCUS
-                      </button>
+              {/* Gorgeous 10-Item Bento Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                
+                {/* 1. Inflow Streams */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-700 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-emerald-950/30 border border-emerald-900 text-emerald-300 rounded-lg">
+                          <Activity className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Inflow Alert Streams</span>
+                      </div>
+                      <span className="text-[9px] bg-emerald-950/60 border border-emerald-900/50 text-emerald-400 font-mono font-bold px-1.5 py-0.5 rounded uppercase">LIVE FEED</span>
                     </div>
-                    <WhaleComparisonMatrix 
-                      onAnalyzeWallet={(wallet) => {
-                        setSelectedWallet(wallet);
-                        scrollToId("wallet-diagnostics-section");
-                      }}
-                      onSimulateImpact={handleShortcutSimulate}
-                      tickers={tickers}
-                    />
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Real-time Binancial API websocket flows and large on-chain transactions ingestion stream. Directly inspect incoming addresses.
+                    </p>
                   </div>
+                  <button 
+                    onClick={() => { setActiveSection("streams"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Launch Feeder Terminal</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
                 </div>
-              ) : (
-                <div className="w-full">
+
+                {/* 2. Whale Matrix */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-700 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-cyan-950/30 border border-cyan-900 text-cyan-400 rounded-lg">
+                          <Database className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Whale Cohort Matrix</span>
+                      </div>
+                      <span className="text-[9px] bg-cyan-950/60 border border-cyan-900/50 text-cyan-400 font-mono font-bold px-1.5 py-0.5 rounded">DENSE MATRIX</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Concentration scales tracking wallet balances, network labels, asset weights, and aggregate allocation patterns.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("matrix"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Launch Matrix Board</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 3. Entity Explorer */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-700 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-indigo-950/30 border border-indigo-900 text-indigo-350 rounded-lg">
+                          <Search className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Entity Explorer</span>
+                      </div>
+                      <span className="text-[9px] bg-slate-950 border border-slate-850 text-slate-400 px-1.5 py-0.5 rounded font-mono truncate max-w-[120px]">
+                        {selectedWallet ? selectedWallet.blockchainLabel : "Select Wallet"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Audit high-net-worth wallet portfolios, run secure Gemini AI-driven ledger summaries, and verify risk score categories.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("explorer"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Inspect Target Portfolio</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 4. Holdings Hub */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-700 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-purple-950/30 border border-purple-900 text-purple-350 rounded-lg">
+                          <Globe className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Holdings Peer Hub</span>
+                      </div>
+                      <span className="text-[9px] bg-purple-950/60 border border-purple-900/50 text-purple-300 font-mono font-bold px-1.5 py-0.5 rounded">PEERS</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Tracks high-volume stablecoins distribution and major holding indices across peer network nodes.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("hub"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Launch Holdings Matrix</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 5. DeFi Rankings */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-700 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-orange-950/30 border border-orange-900 text-orange-350 rounded-lg">
+                          <Coins className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Top DeFi Rankings</span>
+                      </div>
+                      <span className="text-[9px] bg-orange-950/60 border border-orange-900/50 text-orange-400 font-mono font-bold px-1.5 py-0.5 rounded">TVL INDEX</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Track standard DefiLlama protocol statistics, filter by chains, study TVL balances, and inspect governance spaces.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("protocols"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Launch Rankings Ledger</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 6. Volume & Pegs */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-705 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-rose-950/30 border border-rose-900 text-rose-400 rounded-lg">
+                          <TrendingUp className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Volume & De-Pegs</span>
+                      </div>
+                      <span className="text-[9px] bg-rose-950/60 border border-rose-900/50 text-rose-400 font-mono font-bold px-1.5 py-0.5 rounded">PEG LABS</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Inspect fluid high-fidelity volume flow histories and stable asset peg deviations across multiple epochs of market shock.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("charts"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Inspect Peg Trends</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 7. Policy Desk */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-705 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-amber-950/30 border border-amber-900 text-amber-500 rounded-lg">
+                          <Cpu className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Federal Policy Desk</span>
+                      </div>
+                      <span className="text-[9px] bg-amber-950/60 border border-amber-900/50 text-amber-400 font-mono font-bold px-1.5 py-0.5 rounded">US LABS</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Analyze active federal regulatory bills, track the political model index, and study legislative timelines.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("policy"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Launch Policy Center</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 8. Sentiment Monitor */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-705 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-violet-950/30 border border-violet-900 text-violet-350 rounded-lg">
+                          <Zap className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Sentiment Velocity</span>
+                      </div>
+                      <span className="text-[9px] bg-violet-950/60 border border-violet-900/50 text-violet-400 font-mono font-bold px-1.5 py-0.5 rounded">GEMINI AI</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Inspect the sentiment velocity calculations indexed with intelligent cached AI routines from search groundings.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("sentiment"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Read Sentiment Signals</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 9. Slippage Simulator */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-705 hover:scale-[1.01] hover:shadow-cyan-950/10 transition-all flex flex-col justify-between group">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-sky-950/30 border border-sky-900 text-sky-350 rounded-lg">
+                          <AlertTriangle className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-200 uppercase">Slippage Simulator</span>
+                      </div>
+                      <span className="text-[9px] bg-sky-950/60 border border-sky-900/50 text-sky-400 font-mono font-bold px-1.5 py-0.5 rounded">STRESS TEST</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                      Stress-test slippage metrics for selling massive asset positions under dynamic liquidity volumes. Current: {simPresetAsset}.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("simulator"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-cyan-405 font-bold hover:text-cyan-300 border border-slate-800 hover:border-slate-705 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer"
+                  >
+                    <span>Run Stress Simulation</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-cyan-455 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 10. Consensus Whitepaper FAQ */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-700 hover:scale-[1.01] hover:shadow-teal-950/10 transition-all flex flex-col justify-between group md:col-span-2 lg:col-span-3 border-t-teal-600 border-t-2 relative">
+                  <div className="absolute top-0 right-0 w-64 h-full bg-teal-500/5 rounded-full blur-[60px] pointer-events-none"></div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-teal-950/30 border border-teal-900 text-teal-400 rounded-lg">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-100 uppercase">DeFi & Consensus Technology Whitepaper</span>
+                      </div>
+                      <span className="text-[9px] bg-teal-950/60 border border-teal-900/50 text-teal-400 font-mono font-bold px-1.5 py-0.5 rounded">ACADEMIC FAQ</span>
+                    </div>
+                    <p className="text-xs text-slate-350 font-sans leading-relaxed max-w-4xl">
+                      Read academic and mechanical explanations of Layer architecture groups, liquid staking risk profiles, MEV strategies, AMM price formulas, and security indexes. Includes our custom Proof Matrix & Staking Booster Simulator.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("glossary"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-teal-300 font-bold hover:text-teal-200 border border-teal-900 hover:border-teal-850 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer w-full"
+                  >
+                    <span>Study Technical Whitepaper</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-teal-300 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* 1. SECTOR INDEX: Live Inflow Streams Ledger */}
+          {activeSection === "streams" && (
+            <div id="streams-view-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Blockchain Inflow Streams Ledger
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] tracking-wide cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="lg:col-span-8 h-full">
                   <WhaleAlertTicker 
                     onSelectAddress={handleSelectAddress}
                     currentPrices={prices}
                     tickers={tickers}
                   />
                 </div>
-              )}
+                <div className="lg:col-span-4 h-full">
+                  <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-3 py-1.5 border-b-0 font-mono text-[9px] text-slate-500">
+                    <span>ON-CHAIN COHORT PREVIEW</span>
+                    <button
+                      onClick={() => setActiveSection("matrix")}
+                      className="text-[8px] uppercase underline text-cyan-400 hover:text-cyan-300 pointer-events-auto"
+                    >
+                      MAXIMIZE
+                    </button>
+                  </div>
+                  <WhaleComparisonMatrix 
+                    onAnalyzeWallet={(wallet) => {
+                      setSelectedWallet(wallet);
+                      setActiveSection("explorer");
+                    }}
+                    onSimulateImpact={handleShortcutSimulate}
+                    tickers={tickers}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
           {/* 2. SECTOR INDEX: On-Chain Concentration Matrix */}
           {activeSection === "matrix" && (
-            <div id="matrix-focus-card" className="space-y-1">
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2 border-b-0 font-mono text-[10px] text-slate-400">
+            <div id="matrix-focus-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
-                  <span className="font-bold tracking-wider uppercase text-slate-350">
-                    SECTOR INDEX 02: On-Chain Concentration Matrix (Focus Module)
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    On-Chain Concentration Matrix
                   </span>
                 </div>
                 <button
-                  onClick={() => setActiveSection("all")}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-400"
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
                 >
-                  <Minimize2 className="h-3 w-3 text-amber-400" />
-                  <span>EXIT FOCUS MODE (SHOW ALL)</span>
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
                 </button>
               </div>
               <WhaleComparisonMatrix 
                 onAnalyzeWallet={(wallet) => {
                   setSelectedWallet(wallet);
-                  scrollToId("wallet-diagnostics-section");
+                  setActiveSection("explorer");
                 }}
                 onSimulateImpact={handleShortcutSimulate}
                 tickers={tickers}
@@ -805,37 +1160,22 @@ export default function App() {
           )}
 
           {/* 3. SECTOR INDEX: Detailed Wallet Analysis Explorer */}
-          {(activeSection === "all" || activeSection === "explorer") && (
-            <div id="explorer-view-card" className="space-y-1">
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2 border-b-0 font-mono text-[10px] text-slate-400">
+          {activeSection === "explorer" && (
+            <div id="explorer-view-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
-                  <span className="font-bold tracking-wider uppercase text-slate-350">
-                    SECTOR INDEX 03: Entity Portfolio Diagnostics & Explorer
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Entity Portfolio Diagnostics & Explorer
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {activeSection === "explorer" ? (
-                    <button
-                      onClick={() => setActiveSection("all")}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-400"
-                    >
-                      <Minimize2 className="h-3 w-3 text-amber-400" />
-                      <span>EXIT FOCUS MODE (SHOW ALL)</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setActiveSection("explorer");
-                        scrollToId("global-time-horizon-picker");
-                      }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-850 hover:border-slate-700 bg-slate-950 hover:text-cyan-400 font-mono text-[9px] cursor-pointer text-slate-500"
-                    >
-                      <Maximize2 className="h-2.5 w-2.5" />
-                      <span>FOCUS VIEW ⛶</span>
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
               </div>
               <WalletAnalysisSection 
                 selectedWallet={selectedWallet}
@@ -844,37 +1184,22 @@ export default function App() {
           )}
 
           {/* 4. SECTOR INDEX: Address Holdings and Volume Metrics Hub */}
-          {(activeSection === "all" || activeSection === "hub") && (
-            <div id="hub-view-card" className="space-y-1">
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2 border-b-0 font-mono text-[10px] text-slate-400">
+          {activeSection === "hub" && (
+            <div id="hub-view-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-purple-400"></span>
-                  <span className="font-bold tracking-wider uppercase text-slate-350">
-                    SECTOR INDEX 04: Dynamic Blockchain Peer Cluster Holdings Hub
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Dynamic Blockchain Peer Cluster Holdings Hub
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {activeSection === "hub" ? (
-                    <button
-                      onClick={() => setActiveSection("all")}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-400"
-                    >
-                      <Minimize2 className="h-3 w-3 text-amber-400" />
-                      <span>EXIT FOCUS MODE (SHOW ALL)</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setActiveSection("hub");
-                        scrollToId("global-time-horizon-picker");
-                      }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-850 hover:border-slate-700 bg-slate-950 hover:text-cyan-400 font-mono text-[9px] cursor-pointer text-slate-500"
-                    >
-                      <Maximize2 className="h-2.5 w-2.5" />
-                      <span>FOCUS VIEW ⛶</span>
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
               </div>
               <AddressHoldingsHub 
                 currentPrices={prices}
@@ -884,154 +1209,138 @@ export default function App() {
           )}
 
           {/* 5. SECTOR INDEX: On-Chain Volume & Stablecoin Peg Deviation Analytics */}
-          {(activeSection === "all" || activeSection === "charts") && (
-            <div id="charts-view-card" className="space-y-1">
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2 border-b-0 font-mono text-[10px] text-slate-400">
+          {activeSection === "charts" && (
+            <div id="charts-view-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-850 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-rose-400"></span>
-                  <span className="font-bold tracking-wider uppercase text-slate-350">
-                    SECTOR INDEX 05: Aggregate Volumetrical Flow & De-Peg Tracker
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Aggregate Volumetrical Flow & De-Peg Tracker
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {activeSection === "charts" ? (
-                    <button
-                      onClick={() => setActiveSection("all")}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-400"
-                    >
-                      <Minimize2 className="h-3 w-3 text-amber-400" />
-                      <span>EXIT FOCUS MODE (SHOW ALL)</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setActiveSection("charts");
-                        scrollToId("global-time-horizon-picker");
-                      }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-850 hover:border-slate-700 bg-slate-950 hover:text-cyan-400 font-mono text-[9px] cursor-pointer text-slate-500"
-                    >
-                      <Maximize2 className="h-2.5 w-2.5" />
-                      <span>FOCUS VIEW ⛶</span>
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
               </div>
               <MarketChartsTracker currentPrices={prices} globalTimeHorizon={globalTimeHorizon} />
             </div>
           )}
 
           {/* 6. SECTOR INDEX: US Crypto Policy & Legislative Analytics Desk */}
-          {(activeSection === "all" || activeSection === "policy") && (
-            <div id="policy-view-card" className="space-y-1">
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2 border-b-0 font-mono text-[10px] text-slate-400">
+          {activeSection === "policy" && (
+            <div id="policy-view-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
-                  <span className="font-bold tracking-wider uppercase text-slate-350">
-                    SECTOR INDEX 06: Federal Crypto Legislative Analytics & Policy Outlook
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Federal Crypto Legislative Analytics & Policy Outlook
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {activeSection === "policy" ? (
-                    <button
-                      onClick={() => setActiveSection("all")}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-400"
-                    >
-                      <Minimize2 className="h-3 w-3 text-amber-400" />
-                      <span>EXIT FOCUS MODE (SHOW ALL)</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setActiveSection("policy");
-                        scrollToId("global-time-horizon-picker");
-                      }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-850 hover:border-slate-700 bg-slate-950 hover:text-cyan-400 font-mono text-[9px] cursor-pointer text-slate-500"
-                    >
-                      <Maximize2 className="h-2.5 w-2.5" />
-                      <span>FOCUS VIEW ⛶</span>
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
               </div>
               <CryptoPolicySection />
             </div>
           )}
 
           {/* 7. SECTOR INDEX: Multi-Perspective Area Reaction Analytics (Investor Sentiment) */}
-          {(activeSection === "all" || activeSection === "sentiment") && (
-            <div id="sentiment-view-card" className="space-y-1">
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2 border-b-0 font-mono text-[10px] text-slate-400">
+          {activeSection === "sentiment" && (
+            <div id="sentiment-view-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-violet-400"></span>
-                  <span className="font-bold tracking-wider uppercase text-slate-350">
-                    SECTOR INDEX 07: Market Cohorts Sentiment Matrix & Export
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Market Cohorts Sentiment Matrix & Export
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {activeSection === "sentiment" ? (
-                    <button
-                      onClick={() => setActiveSection("all")}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-400"
-                    >
-                      <Minimize2 className="h-3 w-3 text-amber-400" />
-                      <span>EXIT FOCUS MODE (SHOW ALL)</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setActiveSection("sentiment");
-                        scrollToId("global-time-horizon-picker");
-                      }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-850 hover:border-slate-700 bg-slate-950 hover:text-cyan-400 font-mono text-[9px] cursor-pointer text-slate-500"
-                    >
-                      <Maximize2 className="h-2.5 w-2.5" />
-                      <span>FOCUS VIEW ⛶</span>
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
               </div>
               <InvestorReactionMonitor currentPrices={prices} globalTimeHorizon={globalTimeHorizon} />
             </div>
           )}
 
           {/* 8. SECTOR INDEX: AI Order Book Slippage Shock Simulator */}
-          {(activeSection === "all" || activeSection === "simulator") && (
-            <div id="simulator-view-card" className="space-y-1">
-              <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2 border-b-0 font-mono text-[10px] text-slate-400">
+          {activeSection === "simulator" && (
+            <div id="simulator-view-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
-                  <span className="font-bold tracking-wider uppercase text-slate-350">
-                    SECTOR INDEX 08: Liquidity Shock & Dump Stress Simulator
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Liquidity Shock & Dump Stress Simulator
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {activeSection === "simulator" ? (
-                    <button
-                      onClick={() => setActiveSection("all")}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-400"
-                    >
-                      <Minimize2 className="h-3 w-3 text-amber-400" />
-                      <span>EXIT FOCUS MODE (SHOW ALL)</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setActiveSection("simulator");
-                        scrollToId("global-time-horizon-picker");
-                      }}
-                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-850 hover:border-slate-700 bg-slate-950 hover:text-cyan-400 font-mono text-[9px] cursor-pointer text-slate-500"
-                    >
-                      <Maximize2 className="h-2.5 w-2.5" />
-                      <span>FOCUS VIEW ⛶</span>
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
               </div>
               <MarketSimulatorSection 
                 currentPrices={prices}
                 defaultAsset={simPresetAsset}
                 defaultAmount={simPresetAmount}
               />
+            </div>
+          )}
+
+          {/* 9. SECTOR INDEX: DeFiLlama Top 1000 Protocols Hub */}
+          {activeSection === "protocols" && (
+            <div id="protocols-view-card" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse"></span>
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Top 1000 DeFi TVL Rankings & Governance Spaces
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
+              </div>
+              <DeFiLlamaProtocolsHub />
+            </div>
+          )}
+
+          {/* 10. SECTOR INDEX: DeFi & Consensus Technology Whitepaper */}
+          {activeSection === "glossary" && (
+            <div id="whitepaper-view" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Consensus Whitepaper FAQ & Interactive Explorer
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
+              </div>
+              <ChainConsensusEducationalDeck />
             </div>
           )}
 
@@ -1047,6 +1356,6 @@ export default function App() {
         </p>
       </footer>
 
-    </div>
+    </motion.div>
   );
 }

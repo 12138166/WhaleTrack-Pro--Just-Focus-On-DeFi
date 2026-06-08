@@ -33,3 +33,155 @@
 .animate-slide-in-right {
   animation: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* 💻 Terminal High-Contrast Custom Theme & Overrides */
+.theme-terminal {
+  --font-sans: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Base high-contrast pure black backdrops */
+.theme-terminal,
+.theme-terminal .bg-slate-950,
+.theme-terminal.bg-slate-950 {
+  background-color: #000000 !important;
+  color: #00ff66 !important;
+}
+
+/* Custom scanline CRT display overlay */
+.theme-terminal::after {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(34, 197, 94, 0.04), rgba(0, 255, 102, 0.02), rgba(0, 0, 0, 0.04));
+  z-index: 99999;
+  background-size: 100% 4px, 4px 100%;
+  pointer-events: none;
+  opacity: 0.22;
+}
+
+/* Override panels to pure pitch black with sharp, clear terminal borders */
+.theme-terminal .bg-slate-900,
+.theme-terminal .bg-slate-900\/60,
+.theme-terminal .bg-slate-900\/40,
+.theme-terminal .bg-slate-950\/80,
+.theme-terminal .bg-slate-950\/85,
+.theme-terminal .bg-slate-950\/40,
+.theme-terminal .bg-slate-950\/50,
+.theme-terminal .bg-slate-950\/85 {
+  background-color: #050505 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Hard borders: solid vibrant green instead of smooth slate */
+.theme-terminal .border-slate-900,
+.theme-terminal .border-slate-800,
+.theme-terminal .border-slate-850,
+.theme-terminal .border-slate-800\/80,
+.theme-terminal .border-slate-800\/60,
+.theme-terminal .border-cyan-500\/20,
+.theme-terminal .border-pink-500\/20,
+.theme-terminal .border-indigo-500\/20,
+.theme-terminal .border-rose-500\/20 {
+  border-color: #22c55e !important;
+  border-width: 1px !important;
+}
+
+/* Text elements high contrast translation */
+.theme-terminal .text-slate-100,
+.theme-terminal .text-slate-200,
+.theme-terminal .text-slate-300,
+.theme-terminal h1,
+.theme-terminal h2,
+.theme-terminal h3,
+.theme-terminal h4,
+.theme-terminal h5,
+.theme-terminal h6 {
+  color: #ffffff !important;
+  text-shadow: 0 0 2px rgba(34, 197, 94, 0.5) !important;
+}
+
+.theme-terminal .text-slate-400,
+.theme-terminal .text-slate-450,
+.theme-terminal .text-slate-500,
+.theme-terminal p,
+.theme-terminal label,
+.theme-terminal span:not(.font-bold) {
+  color: #4ade80 !important; /* highly readable rich emerald-green */
+}
+
+/* Custom primary accent glow overrides */
+.theme-terminal .text-cyan-400,
+.theme-terminal .text-cyan-455,
+.theme-terminal .text-cyan-405,
+.theme-terminal .text-cyan-300 {
+  color: #00ffcc !important;
+  text-shadow: 0 0 2px rgba(0, 255, 204, 0.4) !important;
+}
+
+/* Secondary metrics and alerts orange/amber/yellow high-contrast overrides */
+.theme-terminal .text-amber-400,
+.theme-terminal .text-amber-500,
+.theme-terminal .text-amber-505,
+.theme-terminal .text-amber-405,
+.theme-terminal .text-violet-400,
+.theme-terminal .text-indigo-400,
+.theme-terminal .text-purple-400,
+.theme-terminal .text-pink-400 {
+  color: #f59e0b !important; /* glowing tactical amber */
+}
+
+/* Clean direction flows: green for up, red for down */
+.theme-terminal .text-emerald-400,
+.theme-terminal .text-emerald-500,
+.theme-terminal .text-emerald-305 {
+  color: #00ff66 !important;
+}
+
+.theme-terminal .text-red-400,
+.theme-terminal .text-red-500,
+.theme-terminal .text-rose-400,
+.theme-terminal .text-rose-450 {
+  color: #ff3366 !important;
+}
+
+/* High visibility input controls and standard select dropdowns in terminal mode */
+.theme-terminal select,
+.theme-terminal input,
+.theme-terminal textarea,
+.theme-terminal button:not(.cursor-pointer) {
+  background-color: #000000 !important;
+  color: #00ff66 !important;
+  border: 1px solid #22c55e !important;
+  border-radius: 4px !important;
+}
+
+/* High contrast selections & customized retro scrollbar */
+.theme-terminal ::selection {
+  background-color: #22c55e !important;
+  color: #000000 !important;
+}
+
+.theme-terminal ::-webkit-scrollbar-thumb {
+  background-color: #22c55e !important;
+  border-radius: 4px !important;
+}
+
+.theme-terminal ::-webkit-scrollbar-track {
+  background-color: #000000 !important;
+}
+
+/* Smooth global cross-fade theme switches without unmounting react state */
+.theme-terminal,
+.theme-terminal *,
+.theme-deep-space,
+.theme-deep-space * {
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease, text-shadow 0.4s ease, box-shadow 0.4s ease;
+}
+
