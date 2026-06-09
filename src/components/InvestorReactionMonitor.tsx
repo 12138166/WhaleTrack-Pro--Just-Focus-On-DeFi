@@ -43,7 +43,9 @@ import {
   Cell,
   LineChart,
   Line,
-  ReferenceLine
+  ReferenceLine,
+  AreaChart,
+  Area
 } from "recharts";
 
 interface InvestorReactionMonitorProps {
@@ -600,11 +602,17 @@ export const CONSTANT_DISPERSAL_METRICS: DispersalMetricDetail[] = [
 export const InvestorReactionMonitor: React.FC<InvestorReactionMonitorProps> = ({ currentPrices, globalTimeHorizon }) => {
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [userSelectedAsset, setUserSelectedAsset] = useState<"BTC" | "ETH" | "SOL">("BTC");
-  const [viewMode, setViewMode] = useState<"matrix" | "historical" | "timing">("matrix");
+  const [viewMode, setViewMode] = useState<"matrix" | "historical" | "timing" | "trend">("matrix");
   const [selectedHistorical, setSelectedHistorical] = useState<{ pipelineId: string; dayIndex: number }>({
     pipelineId: "whales-retail",
     dayIndex: 30
   });
+
+  // Toggle states for cohort lines inside the Sentiment Trend Chart
+  const [showRetailTrend, setShowRetailTrend] = useState<boolean>(true);
+  const [showWhaleTrend, setShowWhaleTrend] = useState<boolean>(true);
+  const [showInstTrend, setShowInstTrend] = useState<boolean>(true);
+  const [showArbTrend, setShowArbTrend] = useState<boolean>(true);
 
   // State configurations for Scholarly Academic Citations
   const [isCitationOpen, setIsCitationOpen] = useState<boolean>(false);
@@ -643,6 +651,93 @@ export const InvestorReactionMonitor: React.FC<InvestorReactionMonitorProps> = (
     });
     return res.length > 0 ? res : dates;
   }, [dates, globalTimeHorizon]);
+
+  // Compute 30D daily simulated metrics for the Sentiment Trend area chart
+  const trendData = useMemo(() => {
+    return filteredDates.map(day => {
+      let seed = (day.index * 13) % 100;
+      
+      // Calculate baseline cyclic oscillations
+      let cycleRetail = Math.sin((day.index / 30) * Math.PI * 2.5) * 18;
+      let cycleWhales = Math.sin((day.index / 30) * Math.PI * 2.1) * 14;
+      let cycleInst = Math.sin((day.index / 30) * Math.PI * 1.6) * 10;
+      let cycleArb = Math.sin((day.index / 30) * Math.PI * 4.0) * 4;
+
+      // Small day noise
+      let noiseRetail = ((seed % 7) - 3) * 1.5;
+      let noiseWhales = (((seed + 7) % 6) - 3) * 1.0;
+      let noiseInst = (((seed + 11) % 5) - 2) * 0.8;
+      let noiseArb = (((seed + 3) % 4) - 2) * 0.5;
+
+      // Apply asset specific variance
+      let assetFactorRetail = userSelectedAsset === "SOL" ? 8 : userSelectedAsset === "ETH" ? 3 : -2;
+      let assetFactorWhales = userSelectedAsset === "BTC" ? 6 : userSelectedAsset === "ETH" ? 2 : -1;
+      let assetFactorInst = userSelectedAsset === "BTC" ? 9 : userSelectedAsset === "ETH" ? 4 : -4;
+      let assetFactorArb = userSelectedAsset === "SOL" ? -1 : 1;
+
+      // Event-based triggers
+      let eventRetail = 0;
+      let eventWhales = 0;
+      let eventInst = 0;
+      let eventArb = 0;
+
+      if (activeEventId) {
+        const event = CONSTANT_MACRO_EVENTS.find(e => e.id === activeEventId);
+        if (event) {
+          const eventPeakDay = 18;
+          const distance = Math.abs(day.index - eventPeakDay);
+          if (distance <= 6) {
+            const shockScale = (6 - distance) / 6;
+            eventRetail = event.sentimentMultipliers.retail * shockScale * 1.15;
+            eventWhales = event.sentimentMultipliers.whales * shockScale * 1.05;
+            eventInst = event.sentimentMultipliers.institutional * shockScale * 1.0;
+            eventArb = event.sentimentMultipliers.arbitrageurs * shockScale * 0.85;
+          }
+        }
+      }
+
+      const retailVal = Math.min(100, Math.max(5, Math.round(62 + cycleRetail + noiseRetail + assetFactorRetail + eventRetail)));
+      const whalesVal = Math.min(100, Math.max(5, Math.round(68 + cycleWhales + noiseWhales + assetFactorWhales + eventWhales)));
+      const instVal = Math.min(100, Math.max(5, Math.round(75 + cycleInst + noiseInst + assetFactorInst + eventInst)));
+      const arbVal = Math.min(100, Math.max(5, Math.round(50 + cycleArb + noiseArb + assetFactorArb + eventArb)));
+
+      return {
+        name: day.label,
+        dateStr: day.dateStr,
+        dayIndex: day.index,
+        "Retail": retailVal,
+        "Whales": whalesVal,
+        "Institutional": instVal,
+        "Arbitrageurs": arbVal,
+      };
+    });
+  }, [filteredDates, userSelectedAsset, activeEventId]);
+
+  const trendStats = useMemo(() => {
+    if (trendData.length === 0) return null;
+    
+    const retailVals = trendData.map(d => d["Retail"]);
+    const whalesVals = trendData.map(d => d["Whales"]);
+    const instVals = trendData.map(d => d["Institutional"]);
+    const arbVals = trendData.map(d => d["Arbitrageurs"]);
+
+    const calcStats = (vals: number[]) => {
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+      // Simple std deviation approximation for volatility
+      const variance = vals.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / vals.length;
+      const volatility = Math.round(Math.sqrt(variance) * 10) / 10;
+      return { min, max, avg, volatility };
+    };
+
+    return {
+      retail: calcStats(retailVals),
+      whales: calcStats(whalesVals),
+      inst: calcStats(instVals),
+      arb: calcStats(arbVals)
+    };
+  }, [trendData]);
 
   const historicalPipelines = useMemo(() => [
     { id: "whales-retail", label: "Whales ➔ Retail", rowLabel: "Informed Whales", colLabel: "Retail Specimen" },
@@ -2321,6 +2416,19 @@ export const InvestorReactionMonitor: React.FC<InvestorReactionMonitorProps> = (
                 >
                   Retail vs. Inst. Timing
                 </button>
+                <button
+                  type="button"
+                  id="trend-toggle"
+                  onClick={() => setViewMode("trend")}
+                  className={`px-2.5 py-1 rounded text-[8.5px] font-extrabold uppercase transition-all cursor-pointer ${
+                    viewMode === "trend"
+                      ? "bg-rose-500/10 text-rose-455 border border-rose-500/20 shadow"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Visualize shift in market mood over the selected date horizon"
+                >
+                  Sentiment Trend 📈
+                </button>
               </div>
 
               {/* Sentiment Correlation Filter Toggle (Asset Class selector) */}
@@ -2377,7 +2485,9 @@ export const InvestorReactionMonitor: React.FC<InvestorReactionMonitorProps> = (
                 ? "Interactive heat-grid measuring the lead-lag timing offsets and directional flow correlation indexes (r coefficient from -1.0 to +1.0) between distinct market cohorts."
                 : viewMode === "historical"
                 ? "Scholarly observation of multi-cohort microstructural delay thresholds over the last 30 temporal cycles. Heat highlights anomalous latency dilation / highly-efficient timing compression."
-                : "Dynamic correlation matrix mapping retail sentiment shifts across lead-lag offset windows (-24h to +48h) against regulated institutional liquidity inflows (Spot ETF, CME options, OTC Desk)."
+                : viewMode === "timing"
+                ? "Dynamic correlation matrix mapping retail sentiment shifts across lead-lag offset windows (-24h to +48h) against regulated institutional liquidity inflows (Spot ETF, CME options, OTC Desk)."
+                : "Continuous Sentiment Trend spectrum tracking multi-cohort psychological shift horizons (Panic to Euphoria ranges of 0-100) integrated with asset coefficients and macro event overlays."
               }
             </p>
             <span className="uppercase text-slate-550 shrink-0 font-bold">
@@ -2385,7 +2495,9 @@ export const InvestorReactionMonitor: React.FC<InvestorReactionMonitorProps> = (
                 ? `Selected: ${cohortLabels[selectedCell.row]} to ${cohortLabels[selectedCell.col]}`
                 : viewMode === "historical"
                 ? `Selected Pipeline: ${pipelineInfo.label} • Day ${selectedHistorical.dayIndex} (${selectedDayData.label})`
-                : `Timing Focus: ${timingRows.find(r => r.id === selectedTimingCell.rowId)?.label} vs ${timingCols.find(c => c.id === selectedTimingCell.colId)?.label}`
+                : viewMode === "timing"
+                ? `Timing Focus: ${timingRows.find(r => r.id === selectedTimingCell.rowId)?.label} vs ${timingCols.find(c => c.id === selectedTimingCell.colId)?.label}`
+                : `Horizon Scope: ${filteredDates[0]?.label} ➔ ${filteredDates[filteredDates.length - 1]?.label} (${filteredDates.length} Epochs)`
               }
             </span>
           </div>
@@ -2807,7 +2919,7 @@ export const InvestorReactionMonitor: React.FC<InvestorReactionMonitorProps> = (
                 </div>
               </div>
             </>
-          ) : (
+          ) : viewMode === "timing" ? (
             <>
               {/* Timing Heat Grid */}
               <div className="lg:col-span-7 bg-slate-950 p-4 rounded-xl border border-slate-900/80 flex flex-col justify-between space-y-4 select-none">
@@ -3004,6 +3116,338 @@ export const InvestorReactionMonitor: React.FC<InvestorReactionMonitorProps> = (
                     </>
                   );
                 })()}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Sentiment Trend Chart View Block */}
+              <div id="sentiment-trend-chart-view" className="lg:col-span-8 bg-slate-950 p-4 rounded-xl border border-slate-900/80 flex flex-col justify-between space-y-4">
+                <div className="space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-mono text-pink-405 font-bold uppercase tracking-wider block">
+                        COHORT PSYCHOLOGICAL SHIFT SPECTRUM
+                      </span>
+                      <h4 className="text-xs font-mono font-bold text-slate-100 uppercase tracking-tight flex items-center gap-1.5">
+                        <TrendingUp className="h-4.5 w-4.5 text-emerald-450" />
+                        Smoothed 30D Sentiment Shift Over Selected Horizon (情绪走势光谱图)
+                      </h4>
+                    </div>
+
+                    <div className="bg-slate-900/60 p-1 rounded-lg border border-slate-800 text-[8px] font-mono text-slate-400 select-none flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>ACTIVE MACRO COEFFICIENTS</span>
+                    </div>
+                  </div>
+
+                  {/* Toggle filter pills */}
+                  <div className="flex flex-wrap items-center gap-2.5 bg-slate-900/35 p-2 rounded-lg border border-slate-900">
+                    <span className="text-[8px] font-mono text-slate-500 font-extrabold uppercase tracking-wider block mr-1">
+                      Filters:
+                    </span>
+                    <button
+                      type="button"
+                      id="toggle-retail-trend"
+                      onClick={() => setShowRetailTrend(!showRetailTrend)}
+                      className={`px-2 py-0.5 rounded border text-[8px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        showRetailTrend 
+                          ? "bg-pink-500/10 text-pink-400 border-pink-500/30" 
+                          : "bg-slate-900/30 text-slate-500 border-slate-900/40"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${showRetailTrend ? "bg-pink-500 shadow-[0_0_4px_#ec4899]" : "bg-slate-600"}`}></span>
+                      Retail Specimen
+                    </button>
+                    <button
+                      type="button"
+                      id="toggle-whale-trend"
+                      onClick={() => setShowWhaleTrend(!showWhaleTrend)}
+                      className={`px-2 py-0.5 rounded border text-[8px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        showWhaleTrend 
+                          ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/30" 
+                          : "bg-slate-900/30 text-slate-500 border-slate-900/40"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${showWhaleTrend ? "bg-indigo-400 shadow-[0_0_4px_#818cf8]" : "bg-slate-600"}`}></span>
+                      Informed Whales
+                    </button>
+                    <button
+                      type="button"
+                      id="toggle-inst-trend"
+                      onClick={() => setShowInstTrend(!showInstTrend)}
+                      className={`px-2 py-0.5 rounded border text-[8px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        showInstTrend 
+                          ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30" 
+                          : "bg-slate-900/30 text-slate-500 border-slate-900/40"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${showInstTrend ? "bg-cyan-400 shadow-[0_0_4px_#22d3ee]" : "bg-slate-600"}`}></span>
+                      Regulated Capital
+                    </button>
+                    <button
+                      type="button"
+                      id="toggle-arb-trend"
+                      onClick={() => setShowArbTrend(!showArbTrend)}
+                      className={`px-2 py-0.5 rounded border text-[8px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        showArbTrend 
+                          ? "bg-rose-500/10 text-rose-455 border-rose-505/30" 
+                          : "bg-slate-900/30 text-slate-500 border-slate-900/40"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${showArbTrend ? "bg-rose-450 shadow-[0_0_4px_#f43f5e]" : "bg-slate-600"}`}></span>
+                      Algorithmic Arbitrage
+                    </button>
+                  </div>
+
+                  {/* Recharts Area Chart Container */}
+                  <div className="h-68 w-full bg-slate-950/80 p-1.5 rounded-xl border border-slate-900/70 relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={trendData} margin={{ top: 12, right: 10, left: -22, bottom: 5 }}>
+                        <defs>
+                          <linearGradient id="colorRetail" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ec4899" stopOpacity={0.18}/>
+                            <stop offset="95%" stopColor="#ec4899" stopOpacity={0.01}/>
+                          </linearGradient>
+                          <linearGradient id="colorWhales" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#818cf8" stopOpacity={0.18}/>
+                            <stop offset="95%" stopColor="#818cf8" stopOpacity={0.01}/>
+                          </linearGradient>
+                          <linearGradient id="colorInst" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.18}/>
+                            <stop offset="95%" stopColor="#22d3ee" stopOpacity={0.01}/>
+                          </linearGradient>
+                          <linearGradient id="colorArb" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.18}/>
+                            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.01}/>
+                          </linearGradient>
+                        </defs>
+
+                        <XAxis 
+                          dataKey="name" 
+                          tick={{ fill: '#475569', fontSize: 7, fontFamily: 'monospace' }} 
+                          interval={4}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis 
+                          tick={{ fill: '#475569', fontSize: 7, fontFamily: 'monospace' }} 
+                          axisLine={false}
+                          tickLine={false}
+                          domain={[0, 100]}
+                        />
+                        <Tooltip
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              return (
+                                <div className="bg-slate-950 border border-slate-800 p-2 rounded shadow-2xl space-y-1 max-w-[170px] select-none font-mono text-[9px] text-slate-350">
+                                  <p className="font-extrabold text-slate-200 border-b border-slate-900 pb-1 uppercase">{label}</p>
+                                  {payload.map((entry: any) => {
+                                    let clr = "text-slate-400";
+                                    if (entry.name === "Retail") clr = "text-pink-400";
+                                    else if (entry.name === "Whales") clr = "text-indigo-400";
+                                    else if (entry.name === "Institutional") clr = "text-cyan-400";
+                                    else if (entry.name === "Arbitrageurs") clr = "text-rose-400";
+
+                                    return (
+                                      <div key={entry.name} className="flex justify-between gap-4">
+                                        <span className={clr}>{entry.name}:</span>
+                                        <span className="font-bold text-white pr-0.5">{entry.value} pt</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        
+                        {/* Reference Line for activeEventId Peak Shock Epoch */}
+                        {activeEventId && (
+                          <ReferenceLine x="Jun 18" stroke="#f43f5e" strokeWidth={1} strokeDasharray="3 3" label={{ value: 'SHOCK EPOCH', fill: '#f43f5e', fontSize: 7, position: 'top', fontFamily: 'monospace', fontWeight: 'bold' }} />
+                        )}
+
+                        {showRetailTrend && (
+                          <Area 
+                            type="monotone" 
+                            dataKey="Retail" 
+                            stroke="#ec4899" 
+                            strokeWidth={1.5} 
+                            fillOpacity={1} 
+                            fill="url(#colorRetail)" 
+                            dot={false}
+                            activeDot={{ r: 3, stroke: '#ec4899', strokeWidth: 1 }}
+                          />
+                        )}
+
+                        {showWhaleTrend && (
+                          <Area 
+                            type="monotone" 
+                            dataKey="Whales" 
+                            stroke="#818cf8" 
+                            strokeWidth={1.5} 
+                            fillOpacity={1} 
+                            fill="url(#colorWhales)" 
+                            dot={false}
+                            activeDot={{ r: 3, stroke: '#818cf8', strokeWidth: 1 }}
+                          />
+                        )}
+
+                        {showInstTrend && (
+                          <Area 
+                            type="monotone" 
+                            dataKey="Institutional" 
+                            stroke="#22d3ee" 
+                            strokeWidth={1.5} 
+                            fillOpacity={1} 
+                            fill="url(#colorInst)" 
+                            dot={false}
+                            activeDot={{ r: 3, stroke: '#22d3ee', strokeWidth: 1 }}
+                          />
+                        )}
+
+                        {showArbTrend && (
+                          <Area 
+                            type="monotone" 
+                            dataKey="Arbitrageurs" 
+                            stroke="#f43f5e" 
+                            strokeWidth={1.5} 
+                            fillOpacity={1} 
+                            fill="url(#colorArb)" 
+                            dot={false}
+                            activeDot={{ r: 3, stroke: '#f43f5e', strokeWidth: 1 }}
+                          />
+                        )}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Interpretation Scale Legend */}
+                <div className="flex flex-wrap items-center justify-between gap-y-2 font-mono text-[8.5px] text-slate-500 border-t border-slate-900/85 pt-3 bg-slate-950 rounded-b">
+                  <div className="flex flex-wrap gap-x-3.5 gap-y-1">
+                    <span className="flex items-center gap-1 font-bold text-slate-400">
+                      SPECTRUM KEY:
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                      75-100: Extreme Greed / FOMO
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      55-74: Active Buy / Accumulation
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-450"></span>
+                      40-54: Neutral / Balance
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      0-39: Panic / capitulation
+                    </span>
+                  </div>
+                  <span>Smoothed areas display cumulative historical stress metrics</span>
+                </div>
+              </div>
+
+              {/* Sidebar Statistics & Commentary Panel */}
+              <div className="lg:col-span-4 bg-slate-900/50 p-4 rounded-xl border border-slate-900 flex flex-col justify-between space-y-4">
+                <div className="space-y-3.5">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-mono text-cyan-405 font-bold uppercase select-none tracking-wider flex items-center gap-1">
+                        <Activity className="h-3 w-3 text-cyan-405 animate-pulse" /> TREND ANALYTICS
+                      </span>
+                      <h4 className="text-xs font-mono font-bold text-slate-100 uppercase tracking-tight">
+                        Cohort Statistical Summary
+                      </h4>
+                    </div>
+                    
+                    <div className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 font-mono text-[7.5px] text-slate-500 font-bold uppercase">
+                      30 CYCLE SPECTRUM
+                    </div>
+                  </div>
+
+                  {/* Summary grid */}
+                  {trendStats && (
+                    <div className="space-y-1.5 font-mono text-[9px]">
+                      {/* Retail */}
+                      <div className="bg-slate-950/75 p-2 rounded-lg border border-slate-900/80 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shadow-[0_0_4px_#ec4899]"></span>
+                          <span className="text-pink-400 font-extrabold uppercase text-[8.5px]">Retail:</span>
+                        </div>
+                        <div className="flex items-center gap-3.5 text-slate-350 font-medium">
+                          <span>Avg: <strong className="text-white">{trendStats.retail.avg}</strong></span>
+                          <span>Range: <strong className="text-white">{trendStats.retail.min}-{trendStats.retail.max}</strong></span>
+                          <span>Vol: <strong className="text-white">{trendStats.retail.volatility}</strong></span>
+                        </div>
+                      </div>
+
+                      {/* Whales */}
+                      <div className="bg-slate-950/75 p-2 rounded-lg border border-slate-900/80 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_4px_#818cf8]"></span>
+                          <span className="text-indigo-400 font-extrabold uppercase text-[8.5px]">Whales:</span>
+                        </div>
+                        <div className="flex items-center gap-3.5 text-slate-350 font-medium">
+                          <span>Avg: <strong className="text-white">{trendStats.whales.avg}</strong></span>
+                          <span>Range: <strong className="text-white">{trendStats.whales.min}-{trendStats.whales.max}</strong></span>
+                          <span>Vol: <strong className="text-white">{trendStats.whales.volatility}</strong></span>
+                        </div>
+                      </div>
+
+                      {/* Institutional */}
+                      <div className="bg-slate-950/75 p-2 rounded-lg border border-slate-900/80 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_4px_#22d3ee]"></span>
+                          <span className="text-cyan-400 font-extrabold uppercase text-[8.5px]">Instit.:</span>
+                        </div>
+                        <div className="flex items-center gap-3.5 text-slate-350 font-medium">
+                          <span>Avg: <strong className="text-white">{trendStats.inst.avg}</strong></span>
+                          <span>Range: <strong className="text-white">{trendStats.inst.min}-{trendStats.inst.max}</strong></span>
+                          <span>Vol: <strong className="text-white">{trendStats.inst.volatility}</strong></span>
+                        </div>
+                      </div>
+
+                      {/* Arbitrageurs */}
+                      <div className="bg-slate-950/75 p-2 rounded-lg border border-slate-900/80 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-450 shadow-[0_0_4px_#f43f5e]"></span>
+                          <span className="text-rose-400 font-extrabold uppercase text-[8.5px]">Arbitr.:</span>
+                        </div>
+                        <div className="flex items-center gap-3.5 text-slate-350 font-medium">
+                          <span>Avg: <strong className="text-white">{trendStats.arb.avg}</strong></span>
+                          <span>Range: <strong className="text-white">{trendStats.arb.min}-{trendStats.arb.max}</strong></span>
+                          <span>Vol: <strong className="text-white">{trendStats.arb.volatility}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Interpretive Commentary */}
+                  <div className="p-2.5 bg-slate-950/25 border border-slate-900/65 rounded-lg text-xs leading-relaxed text-slate-300">
+                    <span className="text-[9px] font-mono font-bold text-slate-500 block mb-1 uppercase tracking-wide">
+                      Macro Behavioral Diagnosis:
+                    </span>
+                    <p className="font-sans text-[11px] text-slate-400 leading-relaxed">
+                      {activeEventId ? (
+                        <>
+                          The active shock <strong className="text-rose-400 uppercase">[{CONSTANT_MACRO_EVENTS.find(e => e.id === activeEventId)?.title.split(": ")[1] || "Macro Event"}]</strong> has generated a persistent multi-cohort amplitude shift over the selected date horizon. Notice the high relative volatility recorded among the <strong className="text-pink-400">Retail Specimen</strong> compared to the patient, anti-correlated risk mitigation of <strong className="text-indigo-400">Informed Whales</strong> near the shock epoch.
+                        </>
+                      ) : (
+                        <>
+                          All cohorts are currently reflecting baseline cyclic oscillations. The <strong className="text-cyan-400">Regulated Capital</strong> cohort maintains the highest baseline premium average, while the <strong className="text-pink-400">Retail Specimen</strong> exhibits momentum-driven sentiment swings. Use the macro catalysts at the top of the monitor to simulated live stress-tested trend adjustments dynamically.
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/50 p-2 rounded border border-slate-900 text-[8.5px] space-y-1 font-mono text-slate-450 leading-relaxed">
+                  <span className="font-extrabold uppercase text-[7.5px] text-slate-405 block">MICROSTRUCTURE COMPLIANCE RATIO:</span>
+                  Macro momentum shifts track general risk premium volatility. The smoothed charts can highlight long-term divergence profiles suitable for macro modeling.
+                </div>
               </div>
             </>
           )}
