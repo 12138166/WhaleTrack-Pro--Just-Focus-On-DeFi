@@ -21,7 +21,10 @@ import {
   Coins,
   LayoutGrid,
   FileText,
-  ArrowRight
+  ArrowRight,
+  Flame,
+  Shield,
+  Sparkles
 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, YAxis } from "recharts";
 import { CURATED_WHALES } from "./data";
@@ -36,6 +39,8 @@ import { InvestorReactionMonitor } from "./components/InvestorReactionMonitor";
 import { MarketChartsTracker } from "./components/MarketChartsTracker";
 import { DeFiLlamaProtocolsHub } from "./components/DeFiLlamaProtocolsHub";
 import { ChainConsensusEducationalDeck } from "./components/ChainConsensusEducationalDeck";
+import { WhaleMevDetector } from "./components/WhaleMevDetector";
+import { PolymarketDeFiHub } from "./components/PolymarketDeFiHub";
 
 // Generate realistic starting sequence representing fluctuations in preceding 15 minutes of trading activity
 const generateInitialMockHistory = (basePrice: number, change24h: number): number[] => {
@@ -604,6 +609,16 @@ export default function App() {
             >
               INVESTOR SENTIMENT 👥
             </button>
+            <span className="text-slate-850 text-xs hidden sm:inline">•</span>
+            <button 
+              onClick={() => {
+                setActiveSection("polymarket");
+                scrollToId("global-time-horizon-picker");
+              }} 
+              className="text-xs font-mono text-sky-400 hover:text-sky-305 hover:underline flex-shrink-0 font-bold cursor-pointer animate-pulse"
+            >
+              POLYMARKET DEFI 🔮
+            </button>
           </div>
         </div>
 
@@ -766,6 +781,8 @@ export default function App() {
               { id: "policy", name: "Policy Desk", icon: Cpu, accent: "border-amber-500/50 bg-amber-950/25 text-amber-300 font-bold" },
               { id: "sentiment", name: "Investor Sentiment", icon: Zap, accent: "border-violet-500/50 bg-violet-950/25 text-violet-300 font-bold" },
               { id: "simulator", name: "Slippage Simulator", icon: AlertTriangle, accent: "border-sky-500/50 bg-sky-950/25 text-sky-300 font-bold" },
+              { id: "mev", name: "MEV Bot Tracker", icon: Flame, accent: "border-rose-550/60 bg-rose-950/35 text-rose-300 font-extrabold shadow shadow-rose-550/20" },
+              { id: "polymarket", name: "Polymarket DeFi", icon: Sparkles, accent: "border-sky-500/60 bg-sky-950/35 text-sky-300 font-extrabold shadow shadow-sky-500/20" },
               { id: "glossary", name: "Consensus Whitepaper", icon: FileText, accent: "border-teal-500/60 bg-teal-950/35 text-teal-300 font-black font-extrabold shadow shadow-teal-550/20" }
             ].map((tab) => {
               const TabIcon = tab.icon;
@@ -1076,6 +1093,58 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* 11. MEV Bot Tracker */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-705 hover:scale-[1.01] hover:shadow-rose-950/10 transition-all flex flex-col justify-between group md:col-span-2 lg:col-span-3 border-t-rose-600 border-t-2 relative">
+                  <div className="absolute top-0 right-0 w-64 h-full bg-rose-500/5 rounded-full blur-[60px] pointer-events-none"></div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-rose-950/30 border border-rose-900 text-rose-450 rounded-lg">
+                          <Flame className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-100 uppercase">On-Chain Whale MEV Bot Tracker</span>
+                      </div>
+                      <span className="text-[9px] bg-rose-950/60 border border-rose-900/50 text-rose-400 font-mono font-bold px-1.5 py-0.5 rounded">EXPLOIT AUDIT</span>
+                    </div>
+                    <p className="text-xs text-slate-350 font-sans leading-relaxed">
+                      Audit targeted whale accounts for high-frequency sandwich frontrunning, Jito bundle routing, and liquidation strategies. Test mempool defense RPC relays in an interactive environment.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("mev"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-rose-350 font-bold hover:text-rose-200 border border-rose-900 hover:border-rose-850 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer w-full"
+                  >
+                    <span>Inspect MEV Bot Metrics</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-rose-350 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
+                {/* 12. Polymarket DeFi predictions */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-705 hover:scale-[1.01] hover:shadow-sky-950/10 transition-all flex flex-col justify-between group md:col-span-2 lg:col-span-3 border-t-sky-600 border-t-2 relative">
+                  <div className="absolute top-0 right-0 w-64 h-full bg-sky-500/5 rounded-full blur-[60px] pointer-events-none"></div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-sky-950/30 border border-sky-900 text-sky-400 rounded-lg">
+                          <Sparkles className="h-4 w-4 animate-spin" strokeWidth={1} />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-100 uppercase">Polymarket DeFi Hub</span>
+                      </div>
+                      <span className="text-[9px] bg-sky-950/60 border border-sky-900/50 text-sky-450 font-mono font-bold px-1.5 py-0.5 rounded">PREDICTIVE DATA</span>
+                    </div>
+                    <p className="text-xs text-slate-350 font-sans leading-relaxed">
+                      Observe decentralized crowdsourced prediction markets, keyword heatmaps, real-time odds, and simulated share acquisition engines tracing macro consensus flows.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("polymarket"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-sky-350 font-bold hover:text-sky-200 border border-sky-900 hover:border-sky-850 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer w-full"
+                  >
+                    <span>Observe Predictive Markets</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-sky-350 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
               </div>
             </div>
           )}
@@ -1341,6 +1410,50 @@ export default function App() {
                 </button>
               </div>
               <ChainConsensusEducationalDeck />
+            </div>
+          )}
+
+          {/* 11. MEV DETECTION ENGINE */}
+          {activeSection === "mev" && (
+            <div id="mev-detector-view" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    On-Chain Whale MEV Bot Tracker & Anti-Exploit Console
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
+              </div>
+              <WhaleMevDetector />
+            </div>
+          )}
+
+          {/* 12. POLYMARKET DEFI CONSOLE INDEX */}
+          {activeSection === "polymarket" && (
+            <div id="polymarket-view" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse"></span>
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    Polymarket DeFi Predictive Consensus & Crowdsource Hub
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
+              </div>
+              <PolymarketDeFiHub />
             </div>
           )}
 

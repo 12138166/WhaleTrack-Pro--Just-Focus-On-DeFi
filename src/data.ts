@@ -177,6 +177,154 @@ export const CURATED_WHALES: WhaleWallet[] = [
       { symbol: "TRX", amount: 18400000, valueUsd: 2200000 },
       { symbol: "USDT", amount: 1400000000, valueUsd: 1400000000 }
     ]
+  },
+  {
+    address: "0xF977814e90dA44bFA03b6295A0616a897441aceC",
+    blockchainLabel: "Binance 8 (BNB Chain Validator)",
+    network: "BNB Chain",
+    initialBalance: "2,450,000 BNB",
+    txCount: 154032,
+    age: "5 years",
+    riskRating: "Low",
+    isExchange: true,
+    notes: "Core staking validator and liquidity bridge pipeline for Binance smart chain operations.",
+    assetBalances: [
+      { symbol: "BNB", amount: 2450000, valueUsd: 1421000000 },
+      { symbol: "USDT", amount: 210000000, valueUsd: 210000000 }
+    ]
+  },
+  {
+    address: "0x3912A848deCee8546fFD91295324009aA9821aCf",
+    blockchainLabel: "PancakeSwap Main Router Bot Target",
+    network: "BNB Chain",
+    initialBalance: "184,800 BNB + DeFi LPs",
+    txCount: 651203,
+    age: "4 years",
+    riskRating: "High",
+    isExchange: false,
+    notes: "Sub-second multi-hop swap bot tracking PancakeSwap pools. Highly optimized sandwich runner.",
+    assetBalances: [
+      { symbol: "BNB", amount: 184805, valueUsd: 107186900 },
+      { symbol: "CAKE", amount: 15400000, valueUsd: 38500000 }
+    ]
+  },
+  {
+    address: "0xAb8413554F84A657335eefC14DFA85d11A1B2817",
+    blockchainLabel: "Arbitrum MEV King (Sandwich Node)",
+    network: "Arbitrum",
+    initialBalance: "5,400 ETH (~$18M)",
+    txCount: 98402,
+    age: "2 years",
+    riskRating: "Critical",
+    isExchange: false,
+    notes: "Utilizes extreme custom sequencer gas tips. High susceptibility to GMX slippage capture.",
+    assetBalances: [
+      { symbol: "ETH", amount: 5400, valueUsd: 18900000 },
+      { symbol: "ARB", amount: 14200000, valueUsd: 12780000 }
+    ]
+  },
+  {
+    address: "0x6842fd757de814bA940dCEE85c98fD9446fdf8eD",
+    blockchainLabel: "GMX Protocol Vault Reserve Store",
+    network: "Arbitrum",
+    initialBalance: "45,800 ETH + Collateral Pool",
+    txCount: 22031,
+    age: "3 years",
+    riskRating: "Low",
+    isExchange: false,
+    notes: "Central index protocol storage representing GLP backing assets. Safe custody parameters.",
+    assetBalances: [
+      { symbol: "ETH", amount: 45800, valueUsd: 160300000 },
+      { symbol: "BTC", amount: 1100, valueUsd: 104500000 },
+      { symbol: "USDC", amount: 148000000, valueUsd: 148000000 }
+    ]
+  },
+  {
+    address: "0x673185F5cbb8125191A77F54bceBBcFA018c1C9D",
+    blockchainLabel: "Base L2 Rollup Sequencer Node",
+    network: "Base",
+    initialBalance: "22,500 ETH in flight",
+    txCount: 1542380,
+    age: "1.5 years",
+    riskRating: "Low",
+    isExchange: false,
+    notes: "Official Coinbase sequencer execution point. Transmits state roots directly to Ethereum Mainnet every 15 minutes.",
+    assetBalances: [
+      { symbol: "ETH", amount: 22500, valueUsd: 78750000 }
+    ]
+  },
+  {
+    address: "0x1a84f3D94bC81E335ffA93cf4bD7Aee8fcff01cf",
+    blockchainLabel: "Aerodrome AMM Liquidity Router",
+    network: "Base",
+    initialBalance: "45,200,000 AERO",
+    txCount: 840102,
+    age: "1 year",
+    riskRating: "Medium",
+    isExchange: false,
+    notes: "Aggressive slippage loops. Multi-router paths targeted by Frontrunning searchers on Base network.",
+    assetBalances: [
+      { symbol: "AERO", amount: 45200000, valueUsd: 54240000 },
+      { symbol: "USDC", amount: 35000000, valueUsd: 35000000 }
+    ]
+  },
+  {
+    address: "0x8E12a849Df7FD735f492b41F74Cd393da018dCc3",
+    blockchainLabel: "Trader Joe Infinite Liquidator",
+    network: "Avalanche",
+    initialBalance: "1,250,500 AVAX",
+    txCount: 84302,
+    age: "3 years",
+    riskRating: "Critical",
+    isExchange: false,
+    notes: "Flashloan powered MEV liquidation pipeline. Targets Benqi and Aave markets over Avalanche L1 network.",
+    assetBalances: [
+      { symbol: "AVAX", amount: 1250500, valueUsd: 33763500 },
+      { symbol: "USDC", amount: 24000000, valueUsd: 24000000 }
+    ]
+  },
+  {
+    address: "0x53d2C253B820A3efB8Eee1280053C29eB9d09aef",
+    blockchainLabel: "Avalanche Foundation Treasury",
+    network: "Avalanche",
+    initialBalance: "8,500,000 AVAX Store",
+    txCount: 1421,
+    age: "5 years",
+    riskRating: "Low",
+    isExchange: false,
+    notes: "Cold backing store for grant distributions, community chest allocations, and L1 validator delegation support.",
+    assetBalances: [
+      { symbol: "AVAX", amount: 8500000, valueUsd: 229500000 }
+    ]
+  },
+  {
+    address: "0x847de10D832204E9efc9914EfF2B9D0Adee74E4f",
+    blockchainLabel: "Velodrome V2 Solidly LP Whitelist",
+    network: "Optimism",
+    initialBalance: "15,400 ETH Layer Store",
+    txCount: 75430,
+    age: "2 years",
+    riskRating: "High",
+    isExchange: false,
+    notes: "Main protocol backing address for veOP emissions and yield lockers. Constant dynamic re-staking actions.",
+    assetBalances: [
+      { symbol: "ETH", amount: 15400, valueUsd: 53900000 },
+      { symbol: "OP", amount: 18500000, valueUsd: 40700000 }
+    ]
+  },
+  {
+    address: "0x09Df84deC2AeeE5c8435d12C85Cdb922DE843F8D",
+    blockchainLabel: "OP Collective Council Multi-Sig",
+    network: "Optimism",
+    initialBalance: "41,000,000 OP Reserve",
+    txCount: 382,
+    age: "3 years",
+    riskRating: "Low",
+    isExchange: false,
+    notes: "Core Optimism governance treasury. Highly secured multi-signature custodian workflow.",
+    assetBalances: [
+      { symbol: "OP", amount: 41000000, valueUsd: 90200000 }
+    ]
   }
 ];
 

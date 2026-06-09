@@ -7,7 +7,7 @@ export interface AssetBalance {
 export interface WhaleWallet {
   address: string;
   blockchainLabel: string;
-  network: "Ethereum" | "Bitcoin" | "Solana" | "BNB Chain" | "Tron";
+  network: "Ethereum" | "Bitcoin" | "Solana" | "BNB Chain" | "Tron" | "Arbitrum" | "Base" | "Avalanche" | "Optimism";
   initialBalance: string;
   txCount: number;
   age: string;
