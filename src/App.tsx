@@ -71,8 +71,18 @@ const MicroSparkline: React.FC<MicroSparklineProps> = ({ data, color }) => {
   const padding = delta === 0 ? 0.01 : delta * 0.05;
   const yDomain = [minVal - padding, maxVal + padding];
 
+  // Dynamic animation key based on data length and latest price point to trigger on updates
+  const animKey = `${data.length}-${data[data.length - 1]}`;
+
   return (
-    <div className="w-16 h-5 inline-block select-none opacity-85 hover:opacity-100 transition-opacity">
+    <motion.div 
+      key={animKey}
+      initial={{ opacity: 0, y: 3 }}
+      animate={{ opacity: 0.85, y: 0 }}
+      whileHover={{ opacity: 1 }}
+      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }} // ultra smooth ease-out
+      className="w-16 h-5 inline-block select-none"
+    >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData} margin={{ top: 1, bottom: 1, left: 1, right: 1 }}>
           <YAxis domain={yDomain} hide={true} />
@@ -86,7 +96,7 @@ const MicroSparkline: React.FC<MicroSparklineProps> = ({ data, color }) => {
           />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </motion.div>
   );
 };
 
@@ -1431,7 +1441,7 @@ export default function App() {
                   <span>⬅ BACK TO OPERATIONS</span>
                 </button>
               </div>
-              <WhaleMevDetector />
+              <WhaleMevDetector globalTimeHorizon={globalTimeHorizon} />
             </div>
           )}
 
@@ -1453,7 +1463,7 @@ export default function App() {
                   <span>⬅ BACK TO OPERATIONS</span>
                 </button>
               </div>
-              <PolymarketDeFiHub />
+              <PolymarketDeFiHub globalTimeHorizon={globalTimeHorizon} />
             </div>
           )}
 

@@ -31,10 +31,16 @@ import {
   Legend,
   CartesianGrid,
   BarChart,
-  Bar
+  Bar,
+  LineChart,
+  Line
 } from "recharts";
 
-export const WhaleMevDetector: React.FC = () => {
+interface WhaleMevDetectorProps {
+  globalTimeHorizon?: { startDate: string; endDate: string };
+}
+
+export const WhaleMevDetector: React.FC<WhaleMevDetectorProps> = ({ globalTimeHorizon }) => {
   // Selected network and address
   const [selectedNetwork, setSelectedNetwork] = useState<WhaleWallet["network"] | "All">("All");
   const [selectedWhaleAddress, setSelectedWhaleAddress] = useState<string>("0x28C6c06298d514Db089934071355E5743bf21d60");
@@ -248,6 +254,84 @@ export const WhaleMevDetector: React.FC = () => {
 
     return dataPoints;
   }, [arbitrageProfitUsd, baseGasGwei, aggressionLevel]);
+
+  // Comparison data for Sandwich vs Arbitrage over the selected date range
+  const comparisonChartData = useMemo(() => {
+    const startStr = globalTimeHorizon?.startDate || "2026-05-01";
+    const endStr = globalTimeHorizon?.endDate || "2026-05-31";
+
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+
+    const datesList: string[] = [];
+    let current = new Date(start);
+
+    // Safeguard to prevent infinite loops or huge memory footprint
+    let safetyLimit = 0;
+    while (current <= end && safetyLimit < 120) {
+      datesList.push(current.toISOString().split("T")[0]);
+      current.setDate(current.getDate() + 1);
+      safetyLimit++;
+    }
+
+    // Seed depends on active whale address to keep variations
+    const addressString = activeWhale?.address || "generic-node";
+    const seed = addressString.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+    return datesList.map((dt, index) => {
+      // Deterministic base daily profit (USD)
+      let baseSandwich = 14500 + Math.sin(index * 0.4 + seed) * 6000 + ((seed + index) % 40) * 150;
+      let baseArbitrage = 15800 + Math.cos(index * 0.35 + seed) * 5500 + ((seed * index + 17) % 50) * 120;
+
+      // Ensure positive values
+      baseSandwich = Math.max(1200, baseSandwich);
+      baseArbitrage = Math.max(1500, baseArbitrage);
+
+      // Adjust based on network
+      const net = activeWhale?.network || "Ethereum";
+      if (net === "Solana") {
+        baseSandwich *= 1.4;
+        baseArbitrage *= 1.25;
+      } else if (net === "Bitcoin") {
+        baseSandwich = 0; 
+        baseArbitrage *= 0.15; // Low arbitrage on BTC
+      } else if (net === "Arbitrum" || net === "Base") {
+        baseSandwich *= 0.7;
+        baseArbitrage *= 1.45;
+      }
+
+      // Adjust based on defenses active (mitigations check)
+      let sandwichExploitPerformance = baseSandwich;
+      let arbitrageExploitPerformance = baseArbitrage;
+
+      if (hasPrivateRpc) {
+        sandwichExploitPerformance *= 0.15; // Sandwiches are crushed down since they can't be seen in public mempools
+        arbitrageExploitPerformance *= 0.85; // Arbitrage is slightly impacted by slower private propagation
+      }
+      if (hasSlippageCap) {
+        sandwichExploitPerformance *= 0.35; // Sandwiches fail as they move prices past low threshold
+      }
+      if (enforceCoW) {
+        sandwichExploitPerformance *= 0.05; // CoW Swap completely disallows sandwiching (underlying solver model)
+        arbitrageExploitPerformance *= 0.65;
+      }
+
+      // Round nicely
+      const finalSandwich = Math.round(sandwichExploitPerformance);
+      const finalArbitrage = Math.round(arbitrageExploitPerformance);
+
+      // Format date label (e.g., "05/12" from "2026-05-12")
+      const dateParts = dt.split("-");
+      const shortDateLabel = dateParts.length === 3 ? `${dateParts[1]}/${dateParts[2]}` : dt;
+
+      return {
+        date: dt,
+        label: shortDateLabel,
+        "Sandwich Attacks": finalSandwich,
+        "Arbitrage": finalArbitrage
+      };
+    });
+  }, [globalTimeHorizon, activeWhale, hasPrivateRpc, hasSlippageCap, enforceCoW]);
 
   // Simulated MEV transaction logs database
   const simulatedMevTransactions = useMemo(() => {
@@ -1370,84 +1454,201 @@ export const WhaleMevDetector: React.FC = () => {
           </div>
         </div>
 
-        {/* Bar Chart Container */}
-        <div className="bg-slate-900/10 p-3 rounded-xl border border-slate-900 relative">
-          <div className="absolute top-2 right-4 flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping"></span>
-            <span className="text-[8px] font-mono text-slate-500 uppercase">30-Day Aggregated Stream Node</span>
-          </div>
-          
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={filteredAnalyticsData} margin={{ top: 15, right: 10, left: -20, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.15} vertical={false} />
-                <XAxis 
-                  dataKey="shortLabel" 
-                  tick={{ fill: '#64748b', fontSize: 8, fontFamily: 'monospace' }} 
-                  axisLine={{ stroke: '#334155', strokeWidth: 0.5 }}
-                  tickLine={false}
-                />
-                <YAxis 
-                  tickFormatter={(value) => `$${value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}`}
-                  tick={{ fill: '#64748b', fontSize: 8, fontFamily: 'monospace' }} 
-                  axisLine={{ stroke: '#334155', strokeWidth: 0.5 }}
-                  tickLine={false}
-                />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg shadow-2xl space-y-1 font-mono text-[9px] text-slate-350 min-w-[240px] select-none">
-                          <p className="font-extrabold text-slate-200 border-b border-slate-900 pb-1.5 uppercase truncate">{data.label}</p>
-                          <div className="flex justify-between gap-4 mt-1 text-slate-400">
-                            <span>Blockchain (链):</span>
-                            <span className="font-bold text-white uppercase">{data.network}</span>
+        {/* 📊 Parallel Charts: Accumulative 30D Stats VS. Date Horizon Real-Time Strategy Showdown */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Bar Chart Container */}
+          <div className="bg-slate-900/10 p-3 rounded-xl border border-slate-900 relative">
+            <div className="absolute top-2 right-4 flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping"></span>
+              <span className="text-[8px] font-mono text-slate-500 uppercase">30-Day Aggregated Stream Node</span>
+            </div>
+            
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={filteredAnalyticsData} margin={{ top: 15, right: 10, left: -20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.15} vertical={false} />
+                  <XAxis 
+                    dataKey="shortLabel" 
+                    tick={{ fill: '#64748b', fontSize: 8, fontFamily: 'monospace' }} 
+                    axisLine={{ stroke: '#334155', strokeWidth: 0.5 }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    tickFormatter={(value) => `$${value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}`}
+                    tick={{ fill: '#64748b', fontSize: 8, fontFamily: 'monospace' }} 
+                    axisLine={{ stroke: '#334155', strokeWidth: 0.5 }}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg shadow-2xl space-y-1 font-mono text-[9px] text-slate-350 min-w-[240px] select-none">
+                            <p className="font-extrabold text-slate-200 border-b border-slate-900 pb-1.5 uppercase truncate">{data.label}</p>
+                            <div className="flex justify-between gap-4 mt-1 text-slate-400">
+                              <span>Blockchain (链):</span>
+                              <span className="font-bold text-white uppercase">{data.network}</span>
+                            </div>
+                            <div className="flex justify-between gap-4 text-rose-450 font-bold">
+                              <span>Sandwich Exploits:</span>
+                              <span>${data.sandwich.toLocaleString()} USD</span>
+                            </div>
+                            <div className="flex justify-between gap-4 text-cyan-455 font-bold">
+                              <span>Looping Arbitrage:</span>
+                              <span>${data.arbitrage.toLocaleString()} USD</span>
+                            </div>
+                            <div className="flex justify-between gap-4 text-amber-450 font-bold">
+                              <span>Liquidation Premiums:</span>
+                              <span>${data.liquidation.toLocaleString()} USD</span>
+                            </div>
+                            <div className="flex justify-between gap-2 border-t border-slate-900 pt-1.5 text-white font-extrabold text-[9.5px]">
+                              <span>Total Extracted (30D):</span>
+                              <span>${data.totalMev.toLocaleString()} USD</span>
+                            </div>
                           </div>
-                          <div className="flex justify-between gap-4 text-rose-450 font-bold">
-                            <span>Sandwich Exploits:</span>
-                            <span>${data.sandwich.toLocaleString()} USD</span>
-                          </div>
-                          <div className="flex justify-between gap-4 text-cyan-455 font-bold">
-                            <span>Looping Arbitrage:</span>
-                            <span>${data.arbitrage.toLocaleString()} USD</span>
-                          </div>
-                          <div className="flex justify-between gap-4 text-amber-450 font-bold">
-                            <span>Liquidation Premiums:</span>
-                            <span>${data.liquidation.toLocaleString()} USD</span>
-                          </div>
-                          <div className="flex justify-between gap-4 border-t border-slate-900 pt-1.5 text-white font-extrabold text-[9.5px]">
-                            <span>Total Extracted (30D):</span>
-                            <span>${data.totalMev.toLocaleString()} USD</span>
-                          </div>
-                        </div>
-                      );
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Legend 
+                    wrapperStyle={{ fontSize: '8px', fontFamily: 'monospace', color: '#64748b', paddingTop: '10px' }} 
+                    iconSize={8}
+                  />
+                  <Bar 
+                    dataKey={analyticsFilterMetric} 
+                    fill={
+                      analyticsFilterMetric === "totalMev" ? "#e11d48" :
+                      analyticsFilterMetric === "sandwich" ? "#f43f5e" :
+                      analyticsFilterMetric === "arbitrage" ? "#06b6d4" :
+                      "#fbbf24"
                     }
-                    return null;
-                  }}
-                />
-                <Legend 
-                  wrapperStyle={{ fontSize: '8px', fontFamily: 'monospace', color: '#64748b', paddingTop: '10px' }} 
-                  iconSize={8}
-                />
-                <Bar 
-                  dataKey={analyticsFilterMetric} 
-                  fill={
-                    analyticsFilterMetric === "totalMev" ? "#e11d48" :
-                    analyticsFilterMetric === "sandwich" ? "#f43f5e" :
-                    analyticsFilterMetric === "arbitrage" ? "#06b6d4" :
-                    "#fbbf24"
-                  }
-                  radius={[4, 4, 0, 0]} 
-                  name={
-                    analyticsFilterMetric === "totalMev" ? "Total Captured MEV (USD)" :
-                    analyticsFilterMetric === "sandwich" ? "Sandwich Frontrun Profit (USD)" :
-                    analyticsFilterMetric === "arbitrage" ? "Loop Arbitrage Yield (USD)" :
-                    "Liquidation Premium Captured (USD)"
-                  }
-                />
-              </BarChart>
-            </ResponsiveContainer>
+                    radius={[4, 4, 0, 0]} 
+                    name={
+                      analyticsFilterMetric === "totalMev" ? "Total Captured MEV (USD)" :
+                      analyticsFilterMetric === "sandwich" ? "Sandwich Frontrun Profit (USD)" :
+                      analyticsFilterMetric === "arbitrage" ? "Loop Arbitrage Yield (USD)" :
+                      "Liquidation Premium Captured (USD)"
+                    }
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 📈 NEW COMPARISON CHART: STRATEGY SHOWDOWN (Sandwich vs Arbitrage over core Date Horizon) */}
+          <div className="bg-slate-900/10 p-3 rounded-xl border border-slate-900 relative flex flex-col justify-between">
+            <div className="absolute top-2 right-4 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-455 animate-pulse"></span>
+              <span className="text-[8px] font-mono text-slate-500 uppercase">
+                {globalTimeHorizon?.startDate || "2026-05-01"} ➔ {globalTimeHorizon?.endDate || "2026-05-31"} HORIZON
+              </span>
+            </div>
+
+            <div className="space-y-1 mb-2">
+              <div className="text-[10px] font-mono font-bold text-slate-200 uppercase tracking-wide flex items-center gap-1">
+                ⚖️ Strategy Yield Rivalry: Sandwich vs. Arbitrage Profitability
+              </div>
+              <p className="text-[9px] text-slate-500 font-sans leading-tight">
+                Daily extracted value performance comparing core exploitation strategies on <strong>{activeWhale?.network || "All Chains"}</strong>. Toggling on-chain anti-MEV mitigation protocols immediately hampers Sandwich yield curves.
+              </p>
+            </div>
+
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={comparisonChartData} margin={{ top: 15, right: 10, left: -22, bottom: 20 }}>
+                  <defs>
+                    <linearGradient id="colorSandwich" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0}/>
+                    </linearGradient>
+                    <linearGradient id="colorArbitrage" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.15} vertical={false} />
+                  <XAxis 
+                    dataKey="label" 
+                    tick={{ fill: '#64748b', fontSize: 8, fontFamily: 'monospace' }} 
+                    axisLine={{ stroke: '#334155', strokeWidth: 0.5 }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    tickFormatter={(value) => `$${value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}`}
+                    tick={{ fill: '#64748b', fontSize: 8, fontFamily: 'monospace' }} 
+                    axisLine={{ stroke: '#334155', strokeWidth: 0.5 }}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        const sandwichVal = data["Sandwich Attacks"];
+                        const arbitrageVal = data["Arbitrage"];
+                        const gapVal = Math.abs(sandwichVal - arbitrageVal);
+                        const leader = sandwichVal > arbitrageVal ? "Sandwich Attacks" : "Arbitrage";
+                        return (
+                          <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg shadow-2xl space-y-1.5 font-mono text-[9px] text-slate-350 min-w-[210px] select-none">
+                            <p className="font-extrabold text-slate-200 border-b border-slate-900 pb-1.5 uppercase">DATE: {data.date}</p>
+                            <div className="flex justify-between gap-4 text-rose-455 font-bold">
+                              <span>🥪 Sandwich Exploits:</span>
+                              <span>${sandwichVal.toLocaleString()} USD</span>
+                            </div>
+                            <div className="flex justify-between gap-4 text-cyan-455 font-bold">
+                              <span>🤖 Arbitrage Loop:</span>
+                              <span>${arbitrageVal.toLocaleString()} USD</span>
+                            </div>
+                            <div className="flex justify-between gap-4 border-t border-slate-900 pt-1 text-[8.5px] text-slate-400">
+                              <span>Yield Premium Gap:</span>
+                              <span className="text-white font-extrabold">${gapVal.toLocaleString()} ({leader === "Arbitrage" ? "Arb" : "Sand"} Lead)</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Legend 
+                    wrapperStyle={{ fontSize: '8px', fontFamily: 'monospace', color: '#64748b', paddingTop: '10px' }} 
+                    iconSize={8}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="Sandwich Attacks" 
+                    stroke="#f43f5e" 
+                    fillOpacity={1} 
+                    fill="url(#colorSandwich)" 
+                    strokeWidth={1.5}
+                    name="Sandwich Attacks (USD)"
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="Arbitrage" 
+                    stroke="#06b6d4" 
+                    fillOpacity={1} 
+                    fill="url(#colorArbitrage)" 
+                    strokeWidth={1.5}
+                    name="Arbitrage Performance (USD)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="mt-2 text-[8px] font-mono text-slate-500 flex items-center justify-between border-t border-slate-900/60 pt-2">
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> 
+                Real-time dynamic data synced with global calendar constraints
+              </span>
+              <span className="text-cyan-455">
+                Dominance Ratio ({activeWhale?.network === "Bitcoin" ? "BTC" : "DeFi"}): {
+                  comparisonChartData.reduce((acc, curr) => acc + curr["Arbitrage"], 0) > 
+                  comparisonChartData.reduce((acc, curr) => acc + curr["Sandwich Attacks"], 0)
+                    ? "Arbitrage Core" : "Sandwich Heavy"
+                }
+              </span>
+            </div>
           </div>
         </div>
       </div>

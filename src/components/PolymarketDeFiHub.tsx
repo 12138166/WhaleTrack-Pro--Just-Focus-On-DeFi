@@ -18,7 +18,15 @@ import {
   Eye,
   SlidersHorizontal,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Percent,
+  ListFilter,
+  BarChart2,
+  Search,
+  BookOpen,
+  PieChart as PieIcon,
+  CircleAlert,
+  AlertTriangle
 } from "lucide-react";
 import { 
   BarChart, 
@@ -32,7 +40,9 @@ import {
   Pie, 
   Cell,
   LineChart,
-  Line
+  Line,
+  AreaChart,
+  Area
 } from "recharts";
 
 // 1. Definition of Prediction Event Type
@@ -65,6 +75,18 @@ interface PolymarketWhaleBet {
   sharesCount: number;
   totalCostUsd: number;
   probabilityAtBet: number;
+}
+
+// 3. User Simulation Holding
+interface UserPosition {
+  id: string;
+  eventId: string;
+  question: string;
+  questionZh: string;
+  side: "YES" | "NO";
+  entryProbability: number; // Price when bought (e.g., 67¢)
+  shares: number;
+  totalCost: number;
 }
 
 const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
@@ -119,7 +141,7 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
   {
     id: "poly-04",
     question: "Will PYUSD occupy > 15% Solana Stablecoin market share by August 31, 2026?",
-    questionZh: "PayPal 的 PYUSD 在 Solana 链上稳定币市场份额到 2026 年 8 月 31 日是否会占到 15% 以上？",
+    questionZh: "PayPal 的 PYUSD 在 Solana 链上稳定币 market 份额到 2026 年 8 月 31 日是否会占到 15% 以上？",
     category: "Stablecoin",
     totalVolume: 4120700,
     yesProbability: 51,
@@ -233,7 +255,7 @@ const INITIAL_WHALE_BETS: PolymarketWhaleBet[] = [
     prediction: "NO",
     sharesCount: 210000,
     totalCostUsd: 157500,
-    probabilityAtBet: 75 // Buying NO (prob yes is 25, so prob NO is 75)
+    probabilityAtBet: 75
   },
   {
     id: "bet-04",
@@ -257,16 +279,34 @@ const INITIAL_WHALE_BETS: PolymarketWhaleBet[] = [
     prediction: "NO",
     sharesCount: 120000,
     totalCostUsd: 44400,
-    probabilityAtBet: 37 // Buying NO (prob yes is 63, so NO is 37)
+    probabilityAtBet: 37
   }
 ];
 
-export const PolymarketDeFiHub: React.FC = () => {
+// Helper to generate consistent organic-looking hourly participation trend over the last 24 hours
+const get24hParticipationForEvent = (ev: PolymarketDeFiEvent) => {
+  const seed = ev.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const baseCount = ev.tradersCount / 24; // standard hourly baseline
+  const data = [];
+  for (let h = 0; h < 24; h++) {
+    // organic peak hour factor (late afternoon & evening peak)
+    const peakFactor = Math.sin((h / 24) * Math.PI * 2 - Math.PI / 2) * 0.35 + 1.1; 
+    const wave = Math.sin(h * 0.45 + seed) * 0.12 + Math.cos(h * 0.25 + seed) * 0.08;
+    const count = Math.max(2, Math.round(baseCount * peakFactor * (1 + wave)));
+    data.push({ hour: `${h}h`, count });
+  }
+  return data;
+};
+
+export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: string; endDate: string } }> = ({ globalTimeHorizon }) => {
   // --- States ---
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [selectedEventId, setSelectedEventId] = useState<string>("poly-01");
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string>("poly-02");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagFilterMode, setTagFilterMode] = useState<"AND" | "OR">("OR");
+  const [sortBy, setSortBy] = useState<"vol" | "unresolved" | "contested" | "probability">("vol");
+  const [showDonutSector, setShowDonutSector] = useState<boolean>(true);
   
   // Betting Slip State
   const [betSide, setBetSide] = useState<"YES" | "NO">("YES");
@@ -276,13 +316,27 @@ export const PolymarketDeFiHub: React.FC = () => {
   const [events, setEvents] = useState<PolymarketDeFiEvent[]>(CONST_DEFI_EVENTS);
   const [liveBets, setLiveBets] = useState<PolymarketWhaleBet[]>(INITIAL_WHALE_BETS);
 
+  // Simulated Session Holdings state!
+  const [userPositions, setUserPositions] = useState<UserPosition[]>([
+    {
+      id: "init-hold-01",
+      eventId: "poly-02",
+      question: "Will Solana DeFi Total Value Locked (TVL) surpass $15 Billion before July 31, 2026?",
+      questionZh: "Solana 的 DeFi 锁仓质押总量 (TVL) 是否会在 2026 年 7 月 31 日前突破 150 亿美元？",
+      side: "YES",
+      entryProbability: 60,
+      shares: 5000,
+      totalCost: 3000
+    }
+  ]);
+
   // --- Dynamic Poller to Simulate Active Order Book ---
   useEffect(() => {
     const timer = setInterval(() => {
       // 1. Gently slide Yes Probability of random event
       setEvents(prev => {
         return prev.map(ev => {
-          if (Math.random() > 0.6) {
+          if (Math.random() > 0.65) {
             const driftChance = Math.random();
             let delta = 0;
             if (driftChance > 0.6) delta = 1;
@@ -308,10 +362,10 @@ export const PolymarketDeFiHub: React.FC = () => {
       });
 
       // 2. Pop standard random whale predictions to simulate live stream
-      if (Math.random() > 0.75) {
+      if (Math.random() > 0.7) {
         const randEvent = events[Math.floor(Math.random() * events.length)];
-        const randPrice = Math.random() > 0.5 ? "YES" : "NO";
-        const costSeed = Math.round(8000 + Math.random() * 92000);
+        const randPrice = Math.random() > 0.55 ? "YES" : "NO";
+        const costSeed = Math.round(5000 + Math.random() * 45000);
         const buyProb = randPrice === "YES" ? randEvent.yesProbability : (100 - randEvent.yesProbability);
         const shares = Math.round(costSeed / (buyProb / 100));
 
@@ -320,17 +374,17 @@ export const PolymarketDeFiHub: React.FC = () => {
           time: "Just Now",
           txHash: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
           whaleAddress: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
-          whaleLabel: ["Amber Group", "GSR Markets", "Arbitrage Bot V1", "Multicoin Mirror", "Solana Whale #12"][Math.floor(Math.random() * 5)],
-          eventQuestion: randEvent.question.substring(0, 50) + "...",
+          whaleLabel: ["Amber Group", "GSR Markets", "Arbitrage Bot V1", "Multicoin Mirror", "DWF Labs Node", "Wintermute Proxy"][Math.floor(Math.random() * 6)],
+          eventQuestion: randEvent.question,
           prediction: randPrice,
           sharesCount: shares,
           totalCostUsd: costSeed,
           probabilityAtBet: randEvent.yesProbability
         };
 
-        setLiveBets(prev => [newWhaleBet, ...prev.slice(0, 4)]);
+        setLiveBets(prev => [newWhaleBet, ...prev.slice(0, 5)]);
       }
-    }, 6000);
+    }, 5000);
 
     return () => clearInterval(timer);
   }, [events]);
@@ -364,9 +418,112 @@ export const PolymarketDeFiHub: React.FC = () => {
     return events.find(e => e.id === selectedEventId) || events[0];
   }, [events, selectedEventId]);
 
-  // --- Search and Category and Tag Filtering Matrix ---
+  // Dynamic daily odds series of activeEvent over the selected dates spectrum
+  const activeEventHistoricalOdds = useMemo(() => {
+    const startStr = globalTimeHorizon?.startDate || "2026-05-01";
+    const endStr = globalTimeHorizon?.endDate || "2026-05-31";
+
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+
+    const datesList: string[] = [];
+    let current = new Date(start);
+
+    let safetyLimit = 0;
+    while (current <= end && safetyLimit < 120) {
+      datesList.push(current.toISOString().split("T")[0]);
+      current.setDate(current.getDate() + 1);
+      safetyLimit++;
+    }
+
+    // Generate deterministic daily odds for standard deviation based on activeEvent.yesProbability
+    const baseProb = activeEvent.yesProbability;
+    const seed = (activeEvent.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)) + 
+                 (activeEvent.category.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) * 2.5);
+
+    return datesList.map((dt, idx) => {
+      // Create a waving wave representation mimicking high intensity shifting odds
+      const wave = Math.sin(idx * 0.4 + seed) * 11 + Math.cos(idx * 0.2 + seed) * 7;
+      const noise = (dt.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 5) - 2.5;
+
+      let prob = baseProb + wave + noise;
+      prob = Math.max(5, Math.min(95, Math.round(prob)));
+
+      // Model user requested progressive/dynamic participant count trend for each event and timepoint
+      const baseTraders = activeEvent.tradersCount;
+      const dayFactor = Math.sin(idx * 0.25 - 1.2) * 0.15 + 0.9;
+      const volumeSpike = Math.abs(wave) > 10 ? 1.25 : 1.0;
+      const dailyParticipants = Math.max(15, Math.floor(baseTraders * dayFactor * volumeSpike));
+
+      return {
+        date: dt,
+        probability: prob,
+        participants: dailyParticipants
+      };
+    });
+  }, [globalTimeHorizon, activeEvent]);
+
+  // Calculates standard deviation and checks if a sudden/rapid shift is happening
+  const volatilityMetrics = useMemo(() => {
+    const odds = activeEventHistoricalOdds.map(d => d.probability);
+    if (odds.length < 2) {
+      return { stdDev: 0, warning: false, warningLevel: "LOW" as const, maxSingleDayShift: 0 };
+    }
+
+    const mean = odds.reduce((sum, val) => sum + val, 0) / odds.length;
+    const variance = odds.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / odds.length;
+    const stdDev = Math.sqrt(variance);
+
+    // Calculate maximum simulated single-day shift / delta
+    let maxShift = 0;
+    for (let i = 1; i < odds.length; i++) {
+      const shift = Math.abs(odds[i] - odds[i - 1]);
+      if (shift > maxShift) maxShift = shift;
+    }
+
+    const isRapid = stdDev > 6.2 || maxShift > 8.0;
+    let warningLevel: "LOW" | "MEDIUM" | "HIGH" = "LOW";
+    if (stdDev > 8.0 || maxShift > 10.0) {
+      warningLevel = "HIGH";
+    } else if (stdDev > 4.5 || maxShift > 5.0) {
+      warningLevel = "MEDIUM";
+    }
+
+    return {
+      stdDev: Math.round(stdDev * 100) / 100,
+      mean: Math.round(mean * 10) / 10,
+      warning: isRapid,
+      warningLevel,
+      maxSingleDayShift: Math.round(maxShift * 10) / 10,
+      minOdds: Math.min(...odds),
+      maxOdds: Math.max(...odds)
+    };
+  }, [activeEventHistoricalOdds]);
+
+  // --- Calculate other critical variables requested ---
+  const globalMetrics = useMemo(() => {
+    const totalVol = events.reduce((acc, current) => acc + current.totalVolume, 0);
+    const totalLiq = events.reduce((acc, current) => acc + current.liquidityPool, 0);
+    
+    // Divergence rate: Closer YES probe is to 50%, the more "contested", closer to 100/0 is unified consensus.
+    // Let's compute average distance from 50 (normalized out of 50 to render a score between 0 and 100).
+    const sumDivergences = events.reduce((acc, cur) => acc + Math.abs(cur.yesProbability - 50), 0);
+    const avgDivergenceNormalized = Math.round((sumDivergences / events.length) * 2); // 0 (mass debate) up to 100 (high consensus)
+    
+    // Capital turnover velocity (Vol to Liquidity utilization ratio)
+    const capVelocity = totalVol / (totalLiq || 1);
+
+    return {
+      totalVol,
+      totalLiq,
+      avgConsensusScore: avgDivergenceNormalized, // 0 = total puzzle, 100 = unified direction
+      capVelocity
+    };
+  }, [events]);
+
+  // --- Search and Category and Tag Filtering Matrix with Sorting ---
   const filteredEvents = useMemo(() => {
-    return events.filter(e => {
+    const matched = events.filter(e => {
       const matchCategory = selectedCategory === "All" || e.category === selectedCategory;
       const queryLower = searchQuery.toLowerCase();
       const matchSearch = searchQuery === "" || 
@@ -374,11 +531,32 @@ export const PolymarketDeFiHub: React.FC = () => {
         e.questionZh.toLowerCase().includes(queryLower) ||
         e.keywords.some(k => k.toLowerCase().includes(queryLower));
       
-      const matchTag = !selectedTag || e.keywords.includes(selectedTag);
+      const matchTag = selectedTags.length === 0 || (
+        tagFilterMode === "AND" 
+          ? selectedTags.every(t => e.keywords.includes(t))
+          : selectedTags.some(t => e.keywords.includes(t))
+      );
 
       return matchCategory && matchSearch && matchTag;
     });
-  }, [events, selectedCategory, searchQuery, selectedTag]);
+
+    // Sorting block
+    if (sortBy === "vol") {
+      return matched.sort((a, b) => b.totalVolume - a.totalVolume);
+    }
+    if (sortBy === "unresolved") {
+      return matched.sort((a, b) => b.unresolvedShares - a.unresolvedShares);
+    }
+    if (sortBy === "contested") {
+      // Closeness to 50% probability represents maximum contest/disagreement
+      return matched.sort((a, b) => Math.abs(a.yesProbability - 50) - Math.abs(b.yesProbability - 50));
+    }
+    if (sortBy === "probability") {
+      return matched.sort((a, b) => b.yesProbability - a.yesProbability);
+    }
+
+    return matched;
+  }, [events, selectedCategory, searchQuery, selectedTags, tagFilterMode, sortBy]);
 
   // --- Category Volume Breakdown Data for Donut Chart ---
   const categoryChartData = useMemo(() => {
@@ -387,7 +565,7 @@ export const PolymarketDeFiHub: React.FC = () => {
       catMap[e.category] = (catMap[e.category] || 0) + e.totalVolume;
     });
     return Object.keys(catMap).map(cat => ({
-      name: cat.toUpperCase(),
+      name: cat,
       value: catMap[cat]
     }));
   }, [events]);
@@ -401,35 +579,108 @@ export const PolymarketDeFiHub: React.FC = () => {
     Layer2: "#f43f5e"     // rose
   };
 
-  // --- Calculate simulated bet results ---
+  // --- Calculate personal positions with live market values ---
+  const userPortfolioEvaluations = useMemo(() => {
+    let currentAssetValue = 0;
+    let totalInvested = 0;
+
+    const evaluated = userPositions.map(pos => {
+      // Find corresponding shifting event to evaluate mark price
+      const matchedEv = events.find(e => e.id === pos.eventId);
+      const currentProb = matchedEv ? matchedEv.yesProbability : pos.entryProbability;
+      
+      // Share value is probabilistic price (e.g., if YES is 67%, YES shares are worth $0.67, NO shares worth $0.33)
+      const currentSharePrice = pos.side === "YES" ? currentProb / 100 : (100 - currentProb) / 100;
+      const currentValue = pos.shares * currentSharePrice;
+      const profitLoss = currentValue - pos.totalCost;
+      const profitLossPercent = (profitLoss / (pos.totalCost || 1)) * 100;
+
+      currentAssetValue += currentValue;
+      totalInvested += pos.totalCost;
+
+      return {
+        ...pos,
+        currentProbability: currentProb,
+        currentValue,
+        profitLoss,
+        profitLossPercent
+      };
+    });
+
+    return {
+      evaluated,
+      currentAssetValue,
+      totalInvested,
+      aggregateProfitLoss: currentAssetValue - totalInvested,
+      roi: totalInvested > 0 ? ((currentAssetValue - totalInvested) / totalInvested) * 100 : 0
+    };
+  }, [userPositions, events]);
+
+  // --- Calculate simulated bet results and add to portfolio list ---
   const handleBuySharesSimulation = (e: React.FormEvent) => {
     e.preventDefault();
     const parsedAmount = parseFloat(betAmountText);
     if (isNaN(parsedAmount) || parsedAmount <= 1) {
-      setBetFeedbackMsg({ status: "error", text: "Please key in a valid amount greater than $1 (请输入大于1的额数值)" });
+      setBetFeedbackMsg({ status: "error", text: "输入金额需大于 $1。" });
       return;
     }
 
     const priceShare = betSide === "YES" ? activeEvent.yesProbability : (100 - activeEvent.yesProbability);
     const costPerShare = priceShare / 100;
-    const purchasedShares = parsedAmount / costPerShare;
+    const purchasedShares = Math.round(parsedAmount / costPerShare);
     const potentialProfit = purchasedShares - parsedAmount;
 
-    setBetFeedbackMsg({
-      status: "success",
-      text: `Successfully bought ${purchasedShares.toLocaleString(undefined, { maximumFractionDigits: 1 })} shares. Potential payout of $${purchasedShares.toLocaleString(undefined, { maximumFractionDigits: 1 })} on resolution (+${((potentialProfit / parsedAmount) * 100).toFixed(0)}% ROI)!`
+    // 1. Add to positions list so they can track performance live
+    setUserPositions(prev => {
+      const existingIdx = prev.findIndex(p => p.eventId === activeEvent.id && p.side === betSide);
+      if (existingIdx !== -1) {
+        // Average up
+        const copy = [...prev];
+        const existing = copy[existingIdx];
+        const newTotalCost = existing.totalCost + parsedAmount;
+        const newShares = existing.shares + purchasedShares;
+        const newAvgProbability = Math.round((newTotalCost / newShares) * 100);
+
+        copy[existingIdx] = {
+          ...existing,
+          shares: newShares,
+          totalCost: newTotalCost,
+          entryProbability: newAvgProbability
+        };
+        return copy;
+      } else {
+        return [
+          ...prev,
+          {
+            id: `usr-hold-${Date.now()}`,
+            eventId: activeEvent.id,
+            question: activeEvent.question,
+            questionZh: activeEvent.questionZh,
+            side: betSide,
+            entryProbability: priceShare,
+            shares: purchasedShares,
+            totalCost: parsedAmount
+          }
+        ];
+      }
     });
 
-    // Injects this simulated bet right into the top of our ledger history!
+    // 2. Alert success feedback
+    setBetFeedbackMsg({
+      status: "success",
+      text: `模拟买入成功！获得 ${purchasedShares.toLocaleString()} 份 ${betSide} 头寸（平均价格 ${priceShare}¢）。若预测成功结清，最高可获 $${purchasedShares.toLocaleString()}.00 额度 (+${((potentialProfit / parsedAmount) * 100).toFixed(0)}% 潜在ROI)！`
+    });
+
+    // 3. Spawns transaction on list feed
     const myMockWhaleBet: PolymarketWhaleBet = {
       id: `mybet-${Date.now()}`,
       time: "Just Now",
-      txHash: "0x78a5...local",
+      txHash: `0x${Math.random().toString(16).substring(2, 6)}...local`,
       whaleAddress: "0xUser...F5E2",
-      whaleLabel: "🎯 Local Trader Simulation (YOU)",
-      eventQuestion: activeEvent.question.substring(0, 50) + "...",
+      whaleLabel: "🎯 Local Trader Asset (YOU)",
+      eventQuestion: activeEvent.question,
       prediction: betSide,
-      sharesCount: Math.round(purchasedShares),
+      sharesCount: purchasedShares,
       totalCostUsd: parsedAmount,
       probabilityAtBet: activeEvent.yesProbability
     };
@@ -440,71 +691,130 @@ export const PolymarketDeFiHub: React.FC = () => {
   return (
     <div id="polymarket-defi-panel" className="space-y-6">
       
-      {/* 🚀 HUB SYSTEM DESCRIPTION */}
-      <div className="bg-slate-950 p-6 rounded-2xl border border-slate-900 shadow-xl space-y-4">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-          <div className="space-y-1">
-            <span className="text-[9px] font-mono text-cyan-400 font-black uppercase tracking-widest block animate-pulse">
-              POLYMARKET DEFI INFORMATION GATEWAY (聚界预测市场DeFi监测站)
+      {/* 🚀 HUB SYSTEM HEADER WITH QUICK SUMMARY STATS CARD */}
+      <div className="bg-slate-950 p-6 rounded-2xl border border-slate-900 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-32 bg-cyan-500/5 rounded-full blur-[90px] pointer-events-none"></div>
+        <div className="absolute -bottom-6 -left-6 w-56 h-28 bg-rose-500/5 rounded-full blur-[80px] pointer-events-none"></div>
+        
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 relative z-10">
+          <div className="space-y-1.5">
+            <span className="bg-cyan-550/10 border border-cyan-500/20 text-cyan-400 text-[9px] font-mono font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full inline-block animate-pulse">
+              Decentralized Prediction Market Sentinel (聚界DeFi预测市场观测仪)
             </span>
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-gradient-to-br from-indigo-950/40 to-cyan-950/40 border border-cyan-800/30 text-cyan-300 rounded">
-                <Sparkles className="h-4.5 w-4.5 animate-spin" />
+              <div className="p-1 px-2.5 bg-gradient-to-br from-indigo-950 to-slate-950 border border-cyan-800/45 text-cyan-300 rounded text-xs font-mono font-bold">
+                Polymarket DeFi Engine V2
               </div>
-              <h2 className="text-sm font-mono font-bold text-white uppercase tracking-tight">
-                Predictive Analytics, Sentiment Crowdsourcing & Topic Modeling
+              <h2 className="text-base font-mono font-bold text-white uppercase tracking-tight">
+                Crowdsourced Insights, High-Vibe Topic Frequency & Consensuses
               </h2>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed max-w-4xl font-sans">
-              Polymarket is the world's largest decentralized prediction market. This module extracts, programmatically processes, and synthesizes major multi-chain list events, modeling word frequency density maps, dynamic Yes/No odds histories, and high-vibe investor consensus markers to observe market behavior.
+            <p className="text-[11.5px] text-slate-400 leading-relaxed max-w-4xl font-sans">
+              本模块主要监测 Polymarket 去中心化预测协议上针对主要 DeFi 基础设施及多链治理提案的核心预测信息。结合<strong>词频演化图</strong>、<strong>宏观分歧度指数</strong>和<strong>模拟持仓盈亏追踪</strong>，辅助分析全网投资人的宏观反向、情绪定价及链上信息差（Alpha）。
             </p>
           </div>
         </div>
+
+        {/* COMPREHENSIVE BI-LANG VARIABLES TO OBSERVE (必要观察变量网格) */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-5 border-t border-slate-900/80">
+          
+          <div className="bg-slate-900/40 p-3.5 rounded-xl border border-slate-900 hover:border-slate-800 transition-all">
+            <span className="text-[8.5px] text-slate-500 uppercase font-mono tracking-wider block">1. TOtal Active Pool Volume</span>
+            <span className="text-[10px] text-cyan-400 font-bold block mt-0.5">DeFi 预测标的交易总额</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg font-black text-slate-200 font-mono">
+                ${(globalMetrics.totalVol / 1000000).toFixed(2)}M
+              </span>
+              <span className="text-[9px] text-slate-500">USD</span>
+            </div>
+          </div>
+
+          <div className="bg-slate-900/40 p-3.5 rounded-xl border border-slate-900 hover:border-slate-800 transition-all">
+            <span className="text-[8.5px] text-slate-500 uppercase font-mono tracking-wider block">2. Total Liquidity Pools</span>
+            <span className="text-[10px] text-purple-400 font-bold block mt-0.5">多签流动性底池总量</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg font-black text-slate-200 font-mono">
+                ${(globalMetrics.totalLiq / 1000000).toFixed(2)}M
+              </span>
+              <span className="text-[9px] text-slate-500">USD</span>
+            </div>
+          </div>
+
+          <div className="bg-slate-900/40 p-3.5 rounded-xl border border-slate-900 hover:border-slate-800 transition-all relative group">
+            <div className="absolute top-2 right-2 text-slate-600 hover:text-slate-400 cursor-help" title="共识分歧度系数: 计算各个合同偏离50%生死线的加权距离。分数越高，表明投资界的方向越趋同、越形成强烈一边倒共识；分数越低，代表各执己见、双方势均力敌。">
+              <Info className="h-3 w-3" />
+            </div>
+            <span className="text-[8.5px] text-slate-500 uppercase font-mono tracking-wider block">3. Consensus Divergence Coeff.</span>
+            <span className="text-[10px] text-emerald-400 font-bold block mt-0.5">市场共识离散度系数</span>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-lg font-black text-slate-200 font-mono">
+                {globalMetrics.avgConsensusScore}%
+              </span>
+              <span className="text-[9px] bg-slate-950 text-emerald-400 font-mono px-1 py-0.5 rounded border border-emerald-950">
+                {globalMetrics.avgConsensusScore > 40 ? "Unified/共识强烈" : "Divided/博弈白热"}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-slate-900/40 p-3.5 rounded-xl border border-slate-900 hover:border-slate-800 transition-all relative">
+            <div className="absolute top-2 right-2 text-slate-600 hover:text-slate-400 cursor-help" title="资本周转效率: 交易量/当前底池比值。该比值极高代表有高额投机冲动和快速翻转的情绪，可能隐藏着即将爆仓或未被定价的消息。">
+              <Info className="h-3 w-3" />
+            </div>
+            <span className="text-[8.5px] text-slate-500 uppercase font-mono tracking-wider block">4. Capital Turnover Velocity</span>
+            <span className="text-[10px] text-amber-500 font-bold block mt-0.5">资本杠杆投机周转效率</span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg font-black text-slate-200 font-mono">
+                {globalMetrics.capVelocity.toFixed(2)}x
+              </span>
+              <span className="text-[9px] text-slate-500">Volume/Liquidity</span>
+            </div>
+          </div>
+
+        </div>
       </div>
 
-      {/* 📊 CORE GRID: WORD HEAT CLOUD & CUMULATIVE VOL CHARTS */}
+      {/* 📊 CORE VISIBILITY PANEL: INTERACTIVE KEYWORD MAP, HEAT CHART & SECTOR BREAKDOWN DONUT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* LEFT COLUMN: INTERACTIVE WORD CLOUD (HEAT TAGS) */}
-        <div id="polymarket-wordcloud-box" className="lg:col-span-6 bg-slate-950 p-5 rounded-2xl border border-slate-900 flex flex-col justify-between">
+        {/* LEFT COMPONENT: WORD FREQUENCY MAP CLOUD (1/3 Width) */}
+        <div id="polymarket-wordcloud-box" className="lg:col-span-4 bg-slate-950 p-5 rounded-2xl border border-slate-900 flex flex-col justify-between min-h-[340px]">
           <div className="space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-900 pb-3">
               <div className="flex items-center gap-2">
                 <Tag className="h-4 w-4 text-rose-500" />
                 <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                  Event Keyword Word Cloud (预测事件词频图)
+                  Interactive Word Cloud (预测词频关联网图)
                 </h3>
               </div>
-              <span className="text-[8.5px] font-mono text-slate-500 uppercase">Interactive Tag Vector Map</span>
+              <span className="text-[8px] font-mono text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-900/50 uppercase">Multi-Select</span>
             </div>
 
             <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
-              Programmatic aggregation of primary terms found in target DeFi betting rules. Font scale indicates volume density. <strong>Click any tag to filter</strong> active prediction widgets!
+              根据系统过滤出的 DeFi 标的详情汇总的词频，大小代表投注量权重。<strong>支持多词多选过滤</strong>：
             </p>
 
-            {/* Simulated Word Cloud Container */}
-            <div className="bg-slate-900/30 p-5 rounded-xl border border-slate-900/80 min-h-[180px] flex flex-wrap items-center justify-center gap-x-4 gap-y-3 relative overflow-hidden select-none">
-              <div className="absolute top-1 right-2 text-[8px] font-mono text-slate-650 uppercase">Weighted by Traded Vol</div>
+            {/* Visual Word Cloud Grid */}
+            <div className="bg-slate-900/20 p-4 rounded-xl border border-slate-900/80 min-h-[190px] flex flex-wrap items-center justify-center gap-x-3 gap-y-2 relative overflow-hidden select-none pb-12">
+              <div className="absolute top-1.5 right-2 text-[7px] font-mono text-slate-600 uppercase">Weighted by Vol</div>
               
               {keywordAggregations.map((kw) => {
-                // Determine size based on cumulative volume rank
-                const isSelected = selectedTag === kw.text;
+                const isSelected = selectedTags.includes(kw.text);
                 const volM = kw.cumulativeVolume / 1000000;
-                let fontSize = "text-xs";
+                let fontSize = "text-[10px]";
                 let fontColor = "text-slate-400 hover:text-slate-200";
 
-                if (volM > 15) {
-                  fontSize = "text-2xl font-black";
-                  fontColor = isSelected ? "text-rose-455" : "text-rose-400 hover:text-rose-300";
-                } else if (volM > 8) {
-                  fontSize = "text-lg font-extrabold";
-                  fontColor = isSelected ? "text-cyan-455" : "text-cyan-400 hover:text-cyan-200";
-                } else if (volM > 5) {
-                  fontSize = "text-sm font-bold";
-                  fontColor = isSelected ? "text-purple-400" : "text-purple-300 hover:text-purple-100";
+                if (volM > 12) {
+                  fontSize = "text-lg font-black sm:text-xl";
+                  fontColor = isSelected ? "text-rose-450 font-black ring-1 ring-rose-500/50 bg-rose-950/40" : "text-rose-400 hover:text-rose-300 font-bold";
+                } else if (volM > 7) {
+                  fontSize = "text-sm font-bold sm:text-base";
+                  fontColor = isSelected ? "text-cyan-400 font-black ring-1 ring-cyan-500/50 bg-cyan-950/40" : "text-cyan-400 hover:text-cyan-200 font-semibold";
+                } else if (volM > 4) {
+                  fontSize = "text-[11.5px] font-semibold sm:text-xs";
+                  fontColor = isSelected ? "text-purple-400 ring-1 ring-purple-500/50 bg-purple-950/40" : "text-purple-300 hover:text-purple-100";
                 } else {
-                  fontSize = "text-xs font-medium";
-                  fontColor = isSelected ? "text-amber-400" : "text-slate-400 hover:text-slate-250";
+                  fontSize = "text-[9.5px] font-medium";
+                  fontColor = isSelected ? "text-amber-400 ring-1 ring-amber-500/50 bg-amber-950/40" : "text-slate-450 hover:text-slate-200";
                 }
 
                 return (
@@ -513,148 +823,401 @@ export const PolymarketDeFiHub: React.FC = () => {
                     type="button"
                     title={`Keyword: ${kw.text} | Cumulative Event Vol: $${(kw.cumulativeVolume / 1000000).toFixed(1)}M | Heat Index: ${kw.value}`}
                     onClick={() => {
-                      if (selectedTag === kw.text) {
-                        setSelectedTag(null); // Deselect
+                      if (selectedTags.includes(kw.text)) {
+                        setSelectedTags(prev => prev.filter(t => t !== kw.text));
                       } else {
-                        setSelectedTag(kw.text);
-                        // Also expand the Search slightly or scroll
+                        setSelectedTags(prev => [...prev, kw.text]);
                       }
                     }}
-                    className={`transition-all duration-200 cursor-pointer p-1.5 rounded-md hover:scale-105 inline-block ${fontSize} ${fontColor} ${
+                    className={`transition-all duration-200 cursor-pointer px-1.5 py-0.5 rounded-md hover:scale-105 inline-block ${fontSize} ${fontColor} ${
                       isSelected 
-                        ? "bg-slate-900 border border-slate-700 shadow-xl shadow-cyan-950/40 ring-1 ring-cyan-500/30" 
+                        ? "shadow-md shadow-cyan-950/50 font-mono border border-cyan-500/30" 
                         : "hover:bg-slate-900/40"
                     }`}
                   >
                     {kw.text}
-                    <span className="text-[8px] opacity-60 font-mono align-super ml-0.5">
+                    <span className="text-[7.5px] opacity-50 font-mono align-super ml-0.5">
                       ({kw.value})
                     </span>
                   </button>
                 );
               })}
 
-              {selectedTag && (
-                <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-                  <span className="bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[8.5px] font-mono font-bold px-2 py-0.5 rounded-lg flex items-center gap-1">
-                    Active Filter: {selectedTag}
-                    <button type="button" onClick={() => setSelectedTag(null)} className="hover:text-red-400 ml-1 font-bold">×</button>
+              {selectedTags.length > 0 && (
+                <div className="absolute bottom-2 left-2 flex flex-wrap gap-1 items-center max-w-[90%] pb-1 overflow-x-auto">
+                  <span className="text-[8px] font-mono text-slate-500">已选:</span>
+                  {selectedTags.map(tag => (
+                    <span key={tag} className="bg-cyan-950/90 border border-cyan-500/40 text-cyan-400 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5 shrink-0">
+                      {tag}
+                      <button 
+                        type="button" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTags(prev => prev.filter(t => t !== tag));
+                        }} 
+                        className="hover:text-red-400 ml-0.5 font-bold cursor-pointer text-[8.5px]"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 flex flex-col xs:flex-row xs:items-center justify-between text-[9.5px] font-mono text-slate-500 border-t border-slate-900/60 gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[8.5px] text-slate-500">匹配模式:</span>
+              <div className="flex bg-slate-900 border border-slate-800 p-0.5 rounded text-[8px]">
+                <button
+                  type="button"
+                  onClick={() => setTagFilterMode("OR")}
+                  className={`px-1 py-0.5 rounded cursor-pointer transition ${
+                    tagFilterMode === "OR" 
+                      ? "bg-cyan-950 text-cyan-400 font-bold border border-cyan-900/60" 
+                      : "text-slate-500 hover:text-slate-350"
+                  }`}
+                  title="或匹配：包含任意所选关键词的事件"
+                >
+                  ANY (或)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTagFilterMode("AND")}
+                  className={`px-1 py-0.5 rounded cursor-pointer transition ${
+                    tagFilterMode === "AND" 
+                      ? "bg-cyan-950 text-cyan-400 font-bold border border-cyan-900/60" 
+                      : "text-slate-500 hover:text-slate-350"
+                  }`}
+                  title="且匹配：必须包含全部所选关键词的事件"
+                >
+                  ALL (且)
+                </button>
+              </div>
+            </div>
+            <button
+               type="button"
+               disabled={selectedTags.length === 0}
+               onClick={() => setSelectedTags([])}
+               className={`text-[9px] font-bold cursor-pointer transition ${
+                  selectedTags.length > 0 ? "text-rose-400 hover:underline" : "text-slate-600 cursor-not-allowed"
+               }`}
+            >
+              Reset ({selectedTags.length}) / 重置
+            </button>
+          </div>
+        </div>
+
+        {/* MIDDLE COMPONENT: NEW WORD FREQUENCY AND VOLUME RANKING LIST (2/3 Width item) */}
+        <div id="polymarket-rankinglist-box" className="lg:col-span-4 bg-slate-950 p-5 rounded-2xl border border-slate-900 flex flex-col justify-between min-h-[340px]">
+          <div className="space-y-3.5 w-full">
+            <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+              <div className="flex items-center gap-2">
+                <Award className="h-4.5 w-4.5 text-amber-500 animate-pulse" />
+                <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                  Discussion Heat & Gamble Rank (博弈池词频与投注榜)
+                </h3>
+              </div>
+              <span className="text-[8px] font-mono text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-900/50 uppercase">By Traded Vol</span>
+            </div>
+
+            <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
+              反映各关键词所链接的所有预测合同在 DeFil 中的<strong>累计讨论与博弈量</strong>排行，点击指标即可同步高亮或多选过滤：
+            </p>
+
+            <div className="space-y-1.5 max-h-[190px] overflow-y-auto pr-1 select-none scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+              {keywordAggregations.map((kw, idx) => {
+                const isSelected = selectedTags.includes(kw.text);
+                const maxVol = Math.max(...keywordAggregations.map(k => k.cumulativeVolume)) || 1;
+                const percentage = (kw.cumulativeVolume / maxVol) * 100;
+                
+                // Color badges for Top 3
+                let rankBadge = "";
+                if (idx === 0) rankBadge = "bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black";
+                else if (idx === 1) rankBadge = "bg-slate-300 text-slate-900 font-black";
+                else if (idx === 2) rankBadge = "bg-amber-700 text-white font-black";
+                else rankBadge = "bg-slate-900 text-slate-400 border border-slate-850";
+
+                return (
+                  <div 
+                    key={kw.text}
+                    onClick={() => {
+                      if (selectedTags.includes(kw.text)) {
+                        setSelectedTags(prev => prev.filter(t => t !== kw.text));
+                      } else {
+                        setSelectedTags(prev => [...prev, kw.text]);
+                      }
+                    }}
+                    className={`group/row p-1.5 px-2.5 rounded-lg border transition-all duration-150 cursor-pointer flex flex-col justify-between ${
+                      isSelected 
+                        ? "bg-slate-900/80 border-cyan-500/50 shadow-md shadow-cyan-950/20" 
+                        : "bg-slate-900/30 border-slate-900/60 hover:bg-slate-900 hover:border-slate-850"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-1.5">
+                        {/* Rank Badge */}
+                        <span className={`w-3.5 h-3.5 rounded text-[8px] flex items-center justify-center font-mono shrink-0 ${rankBadge}`}>
+                          {idx + 1}
+                        </span>
+                        
+                        {/* Keyword Label */}
+                        <span className={`text-[10px] font-mono tracking-tight transition ${
+                          isSelected ? "text-cyan-400 font-extrabold" : "text-slate-200 group-hover/row:text-white"
+                        }`}>
+                          {kw.text}
+                        </span>
+
+                        {/* Frequency Indicator */}
+                        <span className="text-[8px] text-slate-500 font-mono" title={`Mentioned in ${kw.value} separate events`}>
+                          x{kw.value}
+                        </span>
+                      </div>
+
+                      {/* Cumulative Vol */}
+                      <div className="flex items-center gap-1 font-mono text-[9px]">
+                        <span className="text-slate-300 font-semibold">
+                          ${(kw.cumulativeVolume / 1000000).toFixed(2)}M
+                        </span>
+                        <span className="text-[7.5px] text-slate-550 uppercase">usd</span>
+                        {isSelected && (
+                          <span className="h-1 w-1 rounded-full bg-cyan-400 inline-block ring-1 ring-cyan-950 animate-pulse"></span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress Fill Bar */}
+                    <div className="w-full bg-slate-950 h-0.5 rounded overflow-hidden mt-1 relative">
+                      <div 
+                        className={`h-full transition-all duration-300 ${
+                          isSelected 
+                            ? "bg-gradient-to-r from-cyan-500 to-teal-400" 
+                            : idx === 0 
+                              ? "bg-gradient-to-r from-rose-500 to-red-400"
+                              : idx === 1
+                                ? "bg-gradient-to-r from-cyan-500 to-sky-400"
+                                : "bg-gradient-to-r from-slate-600 to-slate-500"
+                        }`}
+                        style={{ width: `${Math.max(3, percentage)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-900/60 flex items-center justify-between text-[8px] font-mono text-slate-500">
+            <span>discussion frequency reflects actual debate hotspots</span>
+            <span className="text-amber-500 font-bold uppercase flex items-center gap-0.5">
+              <Flame className="h-2.5 w-2.5" /> HEAT INDEX SYNCHRONIZED
+            </span>
+          </div>
+        </div>
+
+        {/* RIGHT COMPONENT: FLEXIBLE DUAL-VIEW (PORTFOLIO VOLUME OR SECTOR BREAKDOWN) (3/3 Width) */}
+        <div id="polymarket-volumechart-box" className="lg:col-span-4 bg-slate-950 p-5 rounded-2xl border border-slate-900 flex flex-col justify-between min-h-[340px]">
+          <div className="space-y-3.5 w-full">
+            <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+              <div className="flex items-center gap-2">
+                <BarChart4 className="h-4 w-4 text-cyan-400" />
+                <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                  {showDonutSector ? "DeFi Sector Cumulative Stakes (板块占比)" : "Value Traded by Keyword Tag (高频标签投注)"}
+                </h3>
+              </div>
+              
+              <button
+                type="button"
+                onClick={() => setShowDonutSector(!showDonutSector)}
+                className="text-[8px] font-mono text-cyan-400 border border-cyan-800/60 bg-cyan-950/20 hover:bg-cyan-950/60 px-1.5 py-0.5 rounded cursor-pointer transition-all shrink-0"
+              >
+                {showDonutSector ? "标签排行" : "板块资金分布"}
+              </button>
+            </div>
+
+            <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
+              {showDonutSector 
+                ? "反映了在诸如 DEX、借贷、稳定币等二级板块由于猜测聚集聚集而锁定的资金配比："
+                : "将各合同定价中的关键词所链接的所有赌注累加而出的全局柱状图排名。"}
+            </p>
+
+            {/* DUAL RENDER LOGIC */}
+            <div className="h-[180px] w-full bg-slate-900/10 rounded-xl relative pt-2">
+              {showDonutSector ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categoryChartData}
+                      cx="50%"
+                      cy="48%"
+                      innerRadius={42}
+                      outerRadius={65}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {categoryChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || "#10b981"} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const val = payload[0].value as number;
+                          const name = payload[0].name as string;
+                          return (
+                            <div className="bg-slate-950 border border-slate-850 p-2 rounded-lg font-mono text-[9px] text-slate-300">
+                              <span className="text-white font-bold block uppercase">{name} Sector</span>
+                              <span className="text-cyan-400 font-bold block mt-0.5">
+                                Agg Volume: ${val.toLocaleString()} USD
+                              </span>
+                              <span className="text-slate-500 text-[8px]">
+                                Share of DeFi bets: {((val / globalMetrics.totalVol) * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={keywordAggregations.slice(0, 7)} 
+                    layout="vertical"
+                    margin={{ top: 5, right: 15, left: -20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} opacity={0.3} />
+                    <XAxis 
+                      type="number" 
+                      tickFormatter={(v) => `$${(v / 1000000).toFixed(0)}M`}
+                      tick={{ fill: '#64748b', fontSize: 8, fontFamily: 'monospace' }}
+                      axisLine={{ stroke: '#1e293b' }}
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      type="category" 
+                      dataKey="text" 
+                      tick={{ fill: '#e2e8f0', fontSize: 8, fontFamily: 'monospace', fontWeight: 'bold' }}
+                      axisLine={{ stroke: '#1e293b' }}
+                      tickLine={false}
+                      width={55}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const dat = payload[0].payload;
+                          return (
+                            <div className="bg-slate-950 border border-slate-850 p-2 rounded-lg font-mono text-[9px] text-slate-300">
+                              <p className="text-white font-bold uppercase">{dat.text} (Tag)</p>
+                              <p className="text-cyan-400 font-extrabold mt-1">Total Bet Weight: ${dat.cumulativeVolume.toLocaleString()} USD</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar 
+                      dataKey="cumulativeVolume" 
+                      fill="#3b82f6" 
+                      radius={[0, 4, 4, 0]}
+                    >
+                      {keywordAggregations.slice(0, 7).map((entry, index) => {
+                        const color = CATEGORY_COLORS[entry.sector] || "#10b981";
+                        return <Cell key={`cell-${index}`} fill={color} opacity={0.8} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+
+              {/* Pie center legend */}
+              {showDonutSector && (
+                <div className="absolute top-[48%] left-[50%] -translate-x-[50%] -translate-y-[50%] text-center pointer-events-none">
+                  <span className="text-[7px] uppercase text-slate-500 font-mono block">STAKES TOTAL</span>
+                  <span className="text-[10px] font-black font-mono text-slate-100">
+                    ${(globalMetrics.totalVol / 1000000).toFixed(1)}M
                   </span>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="mt-4 pt-3 flex flex-col xs:flex-row xs:items-center justify-between text-[10px] font-mono text-slate-500 border-t border-slate-900">
-            <span>Heat Level Index: 12.4M Max</span>
-            <button
-               type="button"
-               disabled={!selectedTag}
-               onClick={() => setSelectedTag(null)}
-               className={`text-[9.5px] font-bold cursor-pointer transition ${
-                  selectedTag ? "text-rose-455 hover:underline" : "text-slate-650"
-               }`}
-            >
-              Clear Keyword Filters (清空词频过滤)
-            </button>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: RECHARTS CUMULATIVE VOLUME INDEX */}
-        <div id="polymarket-volumechart-box" className="lg:col-span-6 bg-slate-950 p-5 rounded-2xl border border-slate-900 flex flex-col justify-between">
-          <div className="space-y-3.5 w-full">
-            <div className="flex items-center justify-between border-b border-slate-900 pb-3">
-              <div className="flex items-center gap-2">
-                <BarChart4 className="h-4 w-4 text-cyan-400" />
-                <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                  Volume Traded by Keywords (关键词累计交易量排行)
-                </h3>
-              </div>
-              <span className="text-[8.5px] font-mono text-slate-500 uppercase">Observer Metrics</span>
-            </div>
-
-            <p className="text-[10px] text-slate-440 font-sans leading-relaxed">
-              Dynamically computed sum of traded volumes on all prediction contracts containing the respective tag identifiers (USD).
-            </p>
-
-            {/* Recharts Column Plot */}
-            <div className="h-[180px] w-full bg-slate-900/10 rounded-xl relative pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={keywordAggregations.slice(0, 8)} 
-                  layout="vertical"
-                  margin={{ top: 5, right: 15, left: -10, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} opacity={0.3} />
-                  <XAxis 
-                    type="number" 
-                    tickFormatter={(v) => `$${(v / 1000000).toFixed(1)}M`}
-                    tick={{ fill: '#64748b', fontSize: 8, fontFamily: 'monospace' }}
-                    axisLine={{ stroke: '#1e293b' }}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    type="category" 
-                    dataKey="text" 
-                    tick={{ fill: '#e2e8f0', fontSize: 9, fontFamily: 'monospace', fontWeight: 'bold' }}
-                    axisLine={{ stroke: '#1e293b' }}
-                    tickLine={false}
-                    width={70}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const dat = payload[0].payload;
-                        return (
-                          <div className="bg-slate-950 border border-slate-850 p-2.5 rounded-lg font-mono text-[9px] text-slate-300">
-                            <p className="text-white font-bold uppercase">{dat.text} (Tag)</p>
-                            <p className="text-cyan-400 font-extrabold mt-1">Total Bet Weight: ${dat.cumulativeVolume.toLocaleString()} USD</p>
-                            <p className="text-[8px] text-slate-500">Includes native {dat.value} linked prediction events</p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Bar 
-                    dataKey="cumulativeVolume" 
-                    fill="#3b82f6" 
-                    radius={[0, 4, 4, 0]}
-                  >
-                    {keywordAggregations.slice(0, 8).map((entry, index) => {
-                      const color = CATEGORY_COLORS[entry.sector] || "#10b981";
-                      return <Cell key={`cell-${index}`} fill={color} opacity={0.8} />;
-                    })}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 flex items-center justify-between font-mono text-[8.5px] text-slate-550 border-t border-slate-900 border-dashed">
-            <span>Color code: DEX·Lending·Stablecoin·Regulation·L2</span>
-            <span>Refreshes dynamically with state poller</span>
+          <div className="mt-4 pt-3 flex items-center justify-between font-mono text-[8px] text-slate-500 border-t border-slate-950">
+            <span>
+              {showDonutSector 
+                ? "STAKING · DEX · 稳定币 · 监管 · 借贷 · L2"
+                : "Aggregated cumulative sum index from 8 current contracts"}
+            </span>
+            <span>Real-time calculation</span>
           </div>
         </div>
 
       </div>
 
-      {/* 🔮 INTERACTIVE PREDICTOR FEED & CHANGER */}
+      {/* 🔮 MAIN SECTION: FEED OF VOTING RULES & HOTTEST FOCUS DETAILED PERSPECTIVE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* LEFT COMPONENT: THE HOT CONTESTED PREDICTION LOGS (DASHBOARD GRID) */}
+        {/* LEFT COLUMN (GRID COLS 8): THE EVENT STREAM & MULTI-SORT CONTROLS */}
         <div className="lg:col-span-8 bg-slate-950 p-5 rounded-2xl border border-slate-900 space-y-4">
           
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-900/80 pb-3">
             <div className="flex items-center gap-2">
-              <Flame className="h-4 w-4 text-orange-500 animate-pulse" />
+              <Flame className="h-4.5 w-4.5 text-orange-500 animate-pulse" />
               <div>
                 <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                  Contested Predictives Matrix (聚界预测最火热投票列表)
+                  Contested Predictives Matrix (预测事件白热化列表面板)
                 </h3>
+                <span className="text-[8px] text-slate-550 block">Click cards to focus primary buy sliders and detailed indicators</span>
               </div>
             </div>
             
+            {/* Sort selection for optimal metrics analysis */}
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono text-slate-500">排序:</span>
+              <div className="flex bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
+                {[
+                  { id: "vol", name: "Stakes Vol" },
+                  { id: "contested", name: "Dispute胶着度" },
+                  { id: "unresolved", name: "Shares" },
+                  { id: "probability", name: "YES Odds" }
+                ].map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSortBy(s.id as any)}
+                    className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold cursor-pointer transition ${
+                      sortBy === s.id
+                        ? "bg-slate-950 text-cyan-400 border border-slate-800"
+                        : "text-slate-500 hover:text-slate-300 border border-transparent"
+                    }`}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Expanded filters widget */}
+          <div className="flex flex-col md:flex-row gap-2">
+            
+            {/* Quick Search */}
+            <div className="relative flex-1">
+              <span className="absolute left-2.5 top-2.5 text-slate-500">
+                <Search className="h-3.5 w-3.5" />
+              </span>
+              <input
+                type="text"
+                placeholder="按协议、说明或标签查找预测事件 (e.g., Uniswap v4, Solana, Gas)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-900/40 border border-slate-850 focus:border-cyan-500 focus:ring-0 text-xs font-mono text-slate-100 placeholder-slate-600 rounded-lg pl-8 pr-3 py-2"
+              />
+            </div>
+
             {/* Category selection */}
             <div className="flex flex-wrap items-center gap-1">
               {["All", "DEX", "Lending", "Staking", "Stablecoin", "Regulation", "Layer2"].map(cat => (
@@ -662,57 +1225,48 @@ export const PolymarketDeFiHub: React.FC = () => {
                   key={cat}
                   type="button"
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold cursor-pointer transition ${
+                  className={`px-2 py-1.5 rounded-lg text-[9px] font-mono font-bold cursor-pointer transition ${
                     selectedCategory === cat
-                      ? "bg-cyan-500/10 border border-cyan-500/25 text-cyan-300"
-                      : "bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent"
+                      ? "bg-cyan-950 border border-cyan-800/60 text-cyan-400"
+                      : "bg-slate-900/50 text-slate-500 hover:text-slate-350 border border-transparent"
                   }`}
                 >
-                  {cat.toUpperCase()}
+                  {cat}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Quick Search */}
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search polymarket DeFi questions, protocols or tags (输入关键词过滤预测投票事件)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-900/40 border border-slate-800 focus:border-rose-500 focus:ring-0 text-xs font-mono text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2"
-            />
-            {selectedTag && (
-              <span className="absolute right-3 top-2 bg-slate-950 border border-slate-850 px-2 py-0.5 rounded text-[8.5px] font-mono text-cyan-400">
-                Tag Filtered: {selectedTag}
-              </span>
-            )}
-          </div>
-
           {/* Grid display of prediction cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredEvents.length === 0 ? (
-              <div className="col-span-2 bg-slate-900/20 py-12 rounded-xl text-center text-slate-500 font-mono text-xs border border-dashed border-slate-850">
-                No contested events matched the filter. Try clearing queries.
+              <div className="col-span-2 bg-slate-900/10 py-12 rounded-xl text-center text-slate-500 font-mono text-xs border border-dashed border-slate-900/80">
+                抱歉，没有找到匹配相应过滤条件的预测事件。请重置关键词或输入。
               </div>
             ) : (
               filteredEvents.map((ev) => {
                 const isSelected = selectedEventId === ev.id;
                 const probDelta = ev.yesProbability - ev.prev12hProbability;
                 const isDeltaPositive = probDelta >= 0;
-                
+
+                // Necessary Variable: Tension index indicating uncertainty level of this debate.
+                // 50% is peak tension (absolute disagreement), while 10% or 90% are relaxed values.
+                const disagreementLevel = 100 - (Math.abs(ev.yesProbability - 50) * 2);
+
                 return (
                   <div
                     key={ev.id}
-                    onClick={() => setSelectedEventId(ev.id)}
-                    className={`bg-slate-900/30 p-4 rounded-xl border transition-all cursor-pointer select-none space-y-3.5 flex flex-col justify-between ${
+                    onClick={() => {
+                      setSelectedEventId(ev.id);
+                      setBetFeedbackMsg({ status: "idle", text: "" });
+                    }}
+                    className={`bg-slate-900/20 p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none space-y-4 flex flex-col justify-between hover:scale-[1.01] ${
                       isSelected
-                        ? "border-rose-500/40 bg-slate-900/50 shadow-inner ring-1 ring-rose-500/10"
-                        : "border-slate-900 hover:border-slate-800"
+                        ? "border-cyan-500/40 bg-slate-900/45 shadow-lg shadow-cyan-950/10 ring-1 ring-cyan-500/10"
+                        : "border-slate-900 hover:border-slate-800 hover:bg-slate-900/20"
                     }`}
                   >
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span 
                           className="px-2 py-0.5 text-[7px] font-extrabold uppercase border rounded font-mono"
@@ -725,40 +1279,61 @@ export const PolymarketDeFiHub: React.FC = () => {
                           {ev.category}
                         </span>
                         
-                        <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-450">
-                          <Users className="h-2.5 w-2.5" />
-                          <span>{ev.tradersCount.toLocaleString()} Traded</span>
+                        <div className="flex items-center gap-2 font-mono text-[8.5px] text-slate-500">
+                          <div className="flex items-center gap-1">
+                            <Users className="h-2.5 w-2.5" />
+                            <span>{ev.tradersCount.toLocaleString()} x 24h:</span>
+                          </div>
+                          
+                          {/* Tiny 24hr sparkline chart */}
+                          <div className="w-12 h-3.5 relative" title="24-hour hourly dual-stake participation trend">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={get24hParticipationForEvent(ev)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                                <Area 
+                                  type="monotone" 
+                                  dataKey="count" 
+                                  stroke="#6366f1" 
+                                  fill="#6366f1" 
+                                  fillOpacity={0.12} 
+                                  strokeWidth={1} 
+                                  dot={false}
+                                  isAnimationActive={false}
+                                />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
                         </div>
                       </div>
 
                       {/* Question English/Chinese */}
                       <div>
-                        <h4 className="text-xs font-semibold text-slate-200 leading-snug group-hover:text-white line-clamp-2">
+                        <h4 className="text-[11.5px] font-semibold text-slate-100 leading-snug">
                           {ev.question}
                         </h4>
-                        <p className="text-[10.5px] text-slate-450 font-sans leading-relaxed mt-1 line-clamp-2">
+                        <p className="text-[10.5px] text-slate-400 font-sans leading-normal mt-1 italic">
                           {ev.questionZh}
                         </p>
                       </div>
                     </div>
 
                     {/* Percentage Probability Display Container */}
-                    <div className="space-y-2 border-t border-slate-900/50 pt-2.5">
+                    <div className="space-y-2.5 border-t border-slate-900 pt-3">
+                      
                       <div className="flex items-end justify-between">
                         <div className="space-y-0.5">
-                          <span className="text-[8px] text-slate-500 uppercase font-bold block">YES Odds Index</span>
+                          <span className="text-[8px] text-slate-500 uppercase font-black tracking-wider block">YES Winning Odds (胜出概率)</span>
                           <div className="flex items-baseline gap-1.5">
-                            <span className="text-base font-black font-mono text-cyan-400">
+                            <span className="text-xl font-black font-mono text-cyan-400">
                               {ev.yesProbability}%
                             </span>
-                            <span className={`text-[9px] font-bold ${isDeltaPositive ? "text-emerald-400" : "text-rose-400"} flex items-center`}>
-                              {isDeltaPositive ? "+" : ""}{probDelta}%
+                            <span className={`text-[9.5px] font-bold ${isDeltaPositive ? "text-emerald-400" : "text-rose-400"} flex items-center`}>
+                              {isDeltaPositive ? "▲" : "▼"}{Math.abs(probDelta)}% (12h)
                             </span>
                           </div>
                         </div>
 
                         {/* Sparkline for Probability */}
-                        <div className="w-20 h-5" title="7-Day Probability Flow">
+                        <div className="w-16 h-5" title="7-day dynamic path of sentiment">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={ev.probabilityHistory.map((v, i) => ({ val: v, idx: i }))}>
                               <YAxis domain={[0, 100]} hide />
@@ -775,21 +1350,30 @@ export const PolymarketDeFiHub: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Micro Progress Bar */}
-                      <div className="h-1 bg-slate-900 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-cyan-400 rounded-full transition-all duration-300"
-                          style={{ width: `${ev.yesProbability}%` }}
-                        ></div>
+                      {/* Micro Progress Bar & Tension Coefficient indicator */}
+                      <div className="space-y-1">
+                        <div className="h-1 bg-slate-950 rounded-full overflow-hidden flex">
+                          <div 
+                            className="bg-cyan-400 transition-all duration-300"
+                            style={{ width: `${ev.yesProbability}%` }}
+                          ></div>
+                          <div 
+                            className="bg-rose-500 transition-all duration-300 flex-1"
+                          ></div>
+                        </div>
+                        <div className="flex justify-between items-center text-[7.5px] font-mono text-slate-650">
+                          <span>Buy YES cost: {ev.yesProbability}¢</span>
+                          <span>分歧激烈度 Index: <span className="text-rose-400 font-bold">{disagreementLevel}%</span></span>
+                        </div>
                       </div>
 
-                      {/* Info lines */}
-                      <div className="flex justify-between items-center text-[9px] font-mono text-slate-500">
-                        <span className="flex items-center gap-1">
+                      {/* Info lines undercard */}
+                      <div className="flex justify-between items-center text-[8.5px] font-mono text-slate-500 pt-1 border-t border-slate-900/40">
+                        <span className="flex items-center gap-1 text-slate-500">
                           <Clock className="h-2.5 w-2.5" />
-                          Exp: {ev.endDate}
+                          截止: {ev.endDate}
                         </span>
-                        <span>Vol: ${(ev.totalVolume / 1000000).toFixed(2)}M Traded</span>
+                        <span>累计博弈重金: ${(ev.totalVolume / 1000000).toFixed(2)}M</span>
                       </div>
                     </div>
                   </div>
@@ -799,30 +1383,340 @@ export const PolymarketDeFiHub: React.FC = () => {
           </div>
         </div>
 
-        {/* RIGHT COMPONENT: CONTEST ORDER BOOK & SIMULATION DECK */}
+        {/* RIGHT COLUMN (GRID COLS 4): THE ACTIVE EVENT PERSPECTIVE & SLIP & USER ASSET WALLET */}
         <div className="lg:col-span-4 space-y-6">
           
-          {/* INTERACTIVE BETTING SLIP SIMULATOR (必要观测变量其一：实时下注模拟器) */}
+          {/* HOT FOCUS PERSPECTIVE WINDOW (必要观测变量其三：当前事件的多维博弈指针解剖) */}
+          <div className="bg-slate-950 p-5 rounded-2xl border border-slate-900 space-y-4">
+            
+            <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4.5 w-4.5 text-cyan-400" />
+                <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                  Detailed Focal Deep Dive (单标的高级博弈解密)
+                </h3>
+              </div>
+              <span className="text-[8px] bg-cyan-950 text-cyan-400 px-1 py-0.5 rounded font-mono">Focal Analytics</span>
+            </div>
+
+            <div className="space-y-2 bg-slate-900/30 p-3 rounded-lg border border-slate-900/80">
+              <div className="flex items-center justify-between text-[8px] text-slate-500 uppercase font-mono font-bold">
+                <span>Active Target Focus (选中事件)</span>
+                <span className="text-cyan-400 text-[9px] font-mono font-bold">ID: {activeEvent.id}</span>
+              </div>
+              <p className="text-slate-100 font-bold text-[11px] leading-relaxed">
+                {activeEvent.question}
+              </p>
+              <p className="text-slate-400 text-[10px] leading-relaxed italic border-t border-slate-950 pt-2 font-sans">
+                {activeEvent.questionZh}
+              </p>
+            </div>
+
+            {/* Other Critical Observational Variables (特有观测高级变量) */}
+            <div className="space-y-2.5 text-[10px] font-mono">
+              <span className="text-[8px] text-slate-500 uppercase font-bold block">Speculative Efficiency Variables (必要监测变量)</span>
+              
+              <div className="grid grid-cols-3 gap-1.5">
+                
+                <div className="bg-slate-900 p-2 rounded-lg border border-slate-900/80">
+                  <span className="text-[6.5px] text-slate-500 uppercase block truncate">Liquidity Depth</span>
+                  <span className="text-slate-400 font-bold block text-[8px] truncate">池流动性金库</span>
+                  <p className="text-slate-200 font-black mt-1 text-[10px] sm:text-[11px] truncate" title={`$${activeEvent.liquidityPool.toLocaleString()}`}>
+                    ${activeEvent.liquidityPool.toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="bg-slate-900 p-2 rounded-lg border border-slate-900/80">
+                  <span className="text-[6.5px] text-slate-500 uppercase block truncate">Value Ratio</span>
+                  <span className="text-slate-400 font-bold block text-[8px] truncate">博弈溢出率</span>
+                  <p className="text-slate-200 font-black mt-1 text-[10px] sm:text-[11px]">
+                    {(activeEvent.totalVolume / (activeEvent.liquidityPool || 1)).toFixed(1)}x
+                  </p>
+                </div>
+
+                <div className="bg-indigo-950/20 p-2 rounded-lg border border-indigo-900/40">
+                  <span className="text-[6.5px] text-indigo-400 uppercase block truncate">Active Gamblers</span>
+                  <span className="text-indigo-300 font-bold block text-[8px] truncate">累计对赌用户</span>
+                  <p className="text-indigo-200 font-black mt-1 text-[10px] sm:text-[11px] flex items-center gap-0.5">
+                    <Users className="h-2.5 w-2.5 text-indigo-400 shrink-0" />
+                    {activeEvent.tradersCount.toLocaleString()}
+                  </p>
+                </div>
+
+              </div>
+
+              {/* Time-point Daily Participants Trend Chart (对每个时间点参与人数统计) */}
+              <div className="bg-slate-900/40 p-2.5 rounded-xl border border-slate-900 space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-900 pb-1">
+                  <span className="text-[8px] text-slate-500 uppercase font-black tracking-wider flex items-center gap-1">
+                    <Users className="h-2.5 w-2.5 text-indigo-400" />
+                    Timepoints Gamble Participants (时空博弈人数走势)
+                  </span>
+                  <span className="text-[7.5px] font-mono text-indigo-400">
+                    Spectrum View
+                  </span>
+                </div>
+                
+                <div className="h-20 w-full relative">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={activeEventHistoricalOdds} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorParticipants" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="date" hide />
+                      <YAxis tick={{ fill: '#475569', fontSize: 7, fontFamily: 'monospace' }} width={25} />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-slate-950 border border-slate-800 p-2 rounded shadow-xl font-mono text-[8.5px] text-slate-300 space-y-0.5">
+                                <p className="text-white font-bold">{data.date}</p>
+                                <p className="text-indigo-400 font-extrabold flex items-center gap-1">
+                                  <Users className="h-2 w-2" />
+                                  Traders: {data.participants.toLocaleString()} Accounts
+                                </p>
+                                <p className="text-cyan-400 font-semibold">📈 YES Odds: {data.probability}%</p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="participants" 
+                        stroke="#6366f1" 
+                        fillOpacity={1} 
+                        fill="url(#colorParticipants)" 
+                        strokeWidth={1}
+                        name="Active Participants"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 24-Hour Hour-by-Hour Sparkline block */}
+              <div className="bg-indigo-950/10 p-2.5 rounded-xl border border-indigo-900/20 space-y-2">
+                <div className="flex items-center justify-between border-b border-indigo-900/30 pb-1">
+                  <span className="text-[8px] text-indigo-300 uppercase font-black tracking-wider flex items-center gap-1">
+                    <History className="h-2.5 w-2.5 text-indigo-400" />
+                    Last 24h Participation Sparkline (24小时每小时对赌人数)
+                  </span>
+                  <span className="text-[7.5px] text-slate-500 font-mono">
+                    24h Live Spark
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-7">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={get24hParticipationForEvent(activeEvent)} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                        <defs>
+                          <linearGradient id="colorTraders24h" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#818cf8" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-slate-950 border border-slate-900 p-1.5 rounded font-mono text-[8.5px] text-slate-300">
+                                  <p className="text-white font-bold">{data.hour} ago</p>
+                                  <p className="text-indigo-300 font-extrabold">{data.count} Traders/h</p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="count" 
+                          stroke="#818cf8" 
+                          fill="url(#colorTraders24h)" 
+                          strokeWidth={1} 
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="text-right shrink-0 border-l border-slate-900 pl-3">
+                    <span className="text-[7px] text-slate-500 block uppercase font-mono leading-none">Hourly Avg</span>
+                    <span className="text-[10px] font-black text-indigo-300 font-mono mt-0.5 block">
+                      {Math.round(activeEvent.tradersCount / 24)} / hr
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Dynamic Market Resolution Score & Sentiment Index */}
+              <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-900 space-y-2">
+                <div className="flex justify-between items-center text-[8.5px]">
+                  <span className="text-slate-450 font-bold header">对冲套利概率差值:</span>
+                  <span className="text-rose-400 font-bold font-mono">
+                    {Math.abs(activeEvent.yesProbability - 50) > 25 ? "⚠️ 胜率偏移过大 (低风险套利)" : "均衡博弈区间 (高变数)"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[8px] text-slate-500">
+                  <span>注: 当胜率过度偏离(如&gt;80%或&lt;20%)，流动性池赔率将不规则倾斜，形成二级对冲套利空子。</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ⚡ VOLATILITY FORECAST GAUGE */}
+            <div className="border-t border-slate-900/60 pt-4 space-y-3">
+              <span className="text-[8px] text-cyan-400 uppercase font-bold block tracking-wider">⚡ Volatility Forecast Gauge (赔率波动率预测)</span>
+              
+              <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-900 flex items-center justify-between gap-4">
+                
+                {/* SVG Gauge Section */}
+                <div className="flex flex-col items-center justify-center shrink-0 w-[110px]">
+                  <div className="relative w-[110px] h-[55px] flex items-center justify-center overflow-hidden">
+                    {/* Semicircular gauge background */}
+                    <svg className="absolute top-0 left-0 w-full h-full" viewBox="0 0 100 50">
+                      {/* Grey path */}
+                      <path 
+                        d="M 10 50 A 40 40 0 0 1 90 50" 
+                        fill="none" 
+                        stroke="#1e293b" 
+                        strokeWidth="8" 
+                        strokeLinecap="round"
+                      />
+                      {/* Gradient path based on volatility */}
+                      <path 
+                        d="M 10 50 A 40 40 0 0 1 90 50" 
+                        fill="none" 
+                        stroke="url(#gaugeGradient)" 
+                        strokeWidth="8" 
+                        strokeLinecap="round"
+                        strokeDasharray={125}
+                        strokeDashoffset={125 - (Math.min(volatilityMetrics.stdDev, 15) / 15) * 125}
+                      />
+                      {/* Definitions for Gradients */}
+                      <defs>
+                        <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#10b981" />
+                          <stop offset="60%" stopColor="#f59e0b" />
+                          <stop offset="100%" stopColor="#f43f5e" />
+                        </linearGradient>
+                      </defs>
+                      {/* Needle */}
+                      {(() => {
+                        const maxVal = 15;
+                        const ratio = Math.min(volatilityMetrics.stdDev, maxVal) / maxVal; // 0 to 1
+                        const angleDeg = 180 + (ratio * 180); // 180 is left, 360/0 is right
+                        const angleRad = (angleDeg * Math.PI) / 180;
+                        const needleLength = 32;
+                        const xOffset = Math.cos(angleRad) * needleLength;
+                        const yOffset = Math.sin(angleRad) * needleLength;
+                        return (
+                          <>
+                            <line 
+                              x1="50" 
+                              y1="50" 
+                              x2={50 + xOffset} 
+                              y2={50 + yOffset} 
+                              stroke="#f1f5f9" 
+                              strokeWidth="2.5" 
+                              strokeLinecap="round" 
+                            />
+                            <circle cx="50" cy="50" r="4.5" fill="#f1f5f9" />
+                            <circle cx="50" cy="50" r="2.5" fill="#0f172a" />
+                          </>
+                        );
+                      })()}
+                    </svg>
+                  </div>
+                  <div className="text-[7.5px] text-slate-500 font-mono flex justify-between w-full px-1 mt-1">
+                    <span>STABLE (0%)</span>
+                    <span>HIGH (15%)</span>
+                  </div>
+                </div>
+
+                {/* Metrics Breakdown */}
+                <div className="flex-1 space-y-1 font-mono">
+                  <div className="text-[7.5px] text-slate-500 uppercase">Volatility Dev (方差偏差)</div>
+                  <div className="flex items-baseline gap-1">
+                    <span className={`text-sm font-black tracking-tight ${
+                      volatilityMetrics.warningLevel === "HIGH" ? "text-rose-500 animate-pulse text-base" :
+                      volatilityMetrics.warningLevel === "MEDIUM" ? "text-amber-500 font-extrabold" :
+                      "text-emerald-400"
+                    }`}>
+                      {volatilityMetrics.stdDev}%
+                    </span>
+                    <span className="text-[7.5px] text-slate-500">σ-Odds</span>
+                  </div>
+                  
+                  <div className="flex flex-col gap-0.5 text-[8px] border-t border-slate-950 pt-1 mt-1">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Mean / 均值:</span>
+                      <span className="text-slate-300 font-bold">{volatilityMetrics.mean}¢</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Range / 溢出:</span>
+                      <span className="text-slate-300">{volatilityMetrics.minOdds}%-{volatilityMetrics.maxOdds}%</span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* WARNING BOX FOR RAPID ODDS SHIFTS */}
+              <div className={`p-2.5 rounded-xl border transition-all ${
+                volatilityMetrics.warning 
+                  ? "bg-rose-950/20 border-rose-500/30 text-rose-350 animate-pulse" 
+                  : "bg-slate-900/10 border-slate-900 text-slate-450"
+              }`}>
+                <div className="flex items-start gap-2">
+                  <div className={`p-1 rounded shrink-0 ${
+                    volatilityMetrics.warning ? "bg-rose-950 text-rose-455" : "bg-slate-950 text-slate-605"
+                  }`}>
+                    {volatilityMetrics.warning ? (
+                      <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+                    ) : (
+                      <CircleAlert className="h-3.5 w-3.5 text-slate-500" />
+                    )}
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className={`text-[8px] font-mono font-bold uppercase tracking-wider ${
+                      volatilityMetrics.warning ? "text-rose-400" : "text-slate-400"
+                    }`}>
+                      {volatilityMetrics.warning 
+                        ? "⚠️ SHIFT ALERT / 赔率异动警告" 
+                        : "Odds Fluctuation Index / 赔率发现指数"
+                      }
+                    </div>
+                    <p className="text-[8.5px] leading-snug text-slate-400 font-sans">
+                      {volatilityMetrics.warning 
+                        ? `该协议最新预测赔率于短期内发生了剧烈波动（单日最大变调达 ${volatilityMetrics.maxSingleDayShift}%），代表有强力链上大户消息差突发，或高度相关的 DeFi 升级处于落地博弈。` 
+                        : `该合约最新赔率波动率处于健康区间（单日最大波幅在 ${volatilityMetrics.maxSingleDayShift}% ¢以内），无爆发性多签或巨鲸操盘迹象，博弈状态有机稳定。`
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* INTERACTIVE BETTING SLIP SIMULATOR */}
           <div id="polymarket-prediction-slip" className="bg-slate-950 p-5 rounded-2xl border border-slate-900 space-y-4">
             
             <div className="flex items-center gap-2 border-b border-slate-900 pb-3">
               <Calculator className="h-4.5 w-4.5 text-cyan-400" />
               <div>
                 <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                  Bet Slip Simulator (虚拟下注结算器)
+                  Real-time Prediction Trade Slip (交易滑点模拟演算器)
                 </h3>
-                <span className="text-[8px] text-slate-500 uppercase block">Instant return calculation engine</span>
-              </div>
-            </div>
-
-            <div className="space-y-1 bg-slate-900/30 p-2.5 rounded-lg border border-slate-900 text-[10px]">
-              <span className="text-[8px] text-slate-500 block uppercase">Target Focus Event:</span>
-              <p className="text-slate-200 font-bold truncate tracking-tight">
-                {activeEvent.question}
-              </p>
-              <div className="flex justify-between mt-1 text-slate-400 font-mono text-[9px]">
-                <span>Category: {activeEvent.category}</span>
-                <span className="text-cyan-400 font-bold">YES Price: ${ (activeEvent.yesProbability/100).toFixed(2) }</span>
+                <span className="text-[8px] text-slate-500 uppercase block">Calculate simulated payouts based on live crowdsourced odds</span>
               </div>
             </div>
 
@@ -835,7 +1729,7 @@ export const PolymarketDeFiHub: React.FC = () => {
                   onClick={() => setBetSide("YES")}
                   className={`py-2 px-3 rounded-xl border text-xs font-mono font-bold transition-all uppercase cursor-pointer text-center ${
                     betSide === "YES"
-                      ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400 shadow-inner"
+                      ? "bg-cyan-500/10 border-cyan-500/50 text-cyan-400 shadow-lg shadow-cyan-950/20"
                       : "bg-slate-900 border-slate-900 text-slate-500 hover:text-slate-350"
                   }`}
                 >
@@ -846,7 +1740,7 @@ export const PolymarketDeFiHub: React.FC = () => {
                   onClick={() => setBetSide("NO")}
                   className={`py-2 px-3 rounded-xl border text-xs font-mono font-bold transition-all uppercase cursor-pointer text-center ${
                     betSide === "NO"
-                      ? "bg-rose-500/10 border-rose-500/40 text-rose-455 shadow-inner"
+                      ? "bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-lg shadow-rose-950/20"
                       : "bg-slate-900 border-slate-900 text-slate-500 hover:text-slate-350"
                   }`}
                 >
@@ -857,10 +1751,10 @@ export const PolymarketDeFiHub: React.FC = () => {
               {/* Amount input */}
               <div className="space-y-1.5 font-mono">
                 <div className="flex justify-between text-[8px] text-slate-500 font-bold uppercase">
-                  <span>Investment (投入美金):</span>
-                  <span>Balance: $100,000 Free Play</span>
+                  <span>Investment Size (投入结算本金):</span>
+                  <span>Free play quota: $100,000 USD</span>
                 </div>
-                <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-2">
+                <div className="flex items-center bg-slate-900 border border-slate-900 rounded-lg p-2.5">
                   <span className="text-slate-500 text-xs font-bold mr-1.5">$</span>
                   <input
                     type="number"
@@ -873,25 +1767,25 @@ export const PolymarketDeFiHub: React.FC = () => {
                     }}
                     className="bg-transparent border-0 flex-1 p-0 text-xs text-white focus:ring-0 focus:outline-none"
                   />
-                  <span className="text-slate-500 text-[9px] font-bold">USD</span>
+                  <span className="text-slate-400 text-[9px] font-bold">USD</span>
                 </div>
               </div>
 
               {/* Immediate Mathematics Panel */}
               {parseFloat(betAmountText) > 0 && (
                 <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-900 text-[10px] space-y-1.5 font-mono">
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>Average price per share:</span>
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span>Average price per share (每份单价):</span>
                     <span>${(betSide === "YES" ? activeEvent.yesProbability / 100 : (100 - activeEvent.yesProbability) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center text-slate-400">
-                    <span>Estimated purchased shares:</span>
+                    <span>Estimated purchased shares (预核发份额):</span>
                     <span className="text-white font-bold">
                       {Math.round((parseFloat(betAmountText) || 0) / ((betSide === "YES" ? activeEvent.yesProbability : (100 - activeEvent.yesProbability)) / 100)).toLocaleString()} Shares
                     </span>
                   </div>
-                  <div className="flex justify-between items-center text-slate-350 border-t border-slate-900/80 pt-1.5">
-                    <span>Potential payout if resolved:</span>
+                  <div className="flex justify-between items-center text-slate-450 border-t border-slate-905 pt-2">
+                    <span>Potential resolution payout (全对估结金):</span>
                     <span className="text-emerald-400 font-extrabold text-[12px] animate-pulse">
                       ${Math.round((parseFloat(betAmountText) || 0) / ((betSide === "YES" ? activeEvent.yesProbability : (100 - activeEvent.yesProbability)) / 100)).toLocaleString()}.00 USD
                     </span>
@@ -903,46 +1797,117 @@ export const PolymarketDeFiHub: React.FC = () => {
               <button
                 type="submit"
                 id="submit-prediction-btn"
-                className="w-full py-2 bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-mono text-xs font-bold uppercase rounded-lg shadow-lg shadow-indigo-950/20 active:scale-[0.98] transition cursor-pointer"
+                className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-mono text-xs font-bold uppercase rounded-lg shadow-xl shadow-cyan-950/20 active:scale-[0.98] transition-all cursor-pointer"
               >
-                Execute Mock Share Acquisition
+                Execute Mock Share Acquisition (虚拟下注买入)
               </button>
             </form>
 
             {/* Simulated execution callback notifications */}
             {betFeedbackMsg.status !== "idle" && (
-              <div className={`p-2.5 rounded-lg border text-[10px] font-mono leading-relaxed flex items-start gap-1.5 ${
+              <div className={`p-3 rounded-lg border text-[10.5px] font-sans leading-relaxed flex items-start gap-1.5 ${
                 betFeedbackMsg.status === "success"
-                  ? "bg-emerald-950/25 border-emerald-900/50 text-emerald-300"
-                  : "bg-rose-955/25 border-rose-900/50 text-rose-300"
+                  ? "bg-emerald-950/30 border-emerald-900/50 text-emerald-300"
+                  : "bg-rose-950/30 border-rose-900/50 text-rose-305"
               }`}>
-                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-cyan-400" />
+                <Info className="h-4 w-4 shrink-0 mt-0.5 text-cyan-400" />
                 <p>{betFeedbackMsg.text}</p>
               </div>
             )}
           </div>
 
-          {/* DYNAMIC WHALE LOGS (必要观测变量其二：聚界大户动态滚动追踪链) */}
+          {/* 🎯 USER'S SIMULATED ACTIVE PORTFOLIO TRACKER (我的个人模拟仓位 - 必要观察变量四) */}
+          <div className="bg-slate-950 p-5 rounded-2xl border border-slate-900 space-y-4">
+            
+            <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-4.5 w-4.5 text-cyan-400" />
+                <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                  My Active Session Holdings (我的模拟预测持仓)
+                </h3>
+              </div>
+              <span className="text-[8.5px] font-mono text-emerald-400 bg-emerald-950/40 px-1 py-0.5 rounded border border-emerald-900">
+                P/L Connected
+              </span>
+            </div>
+
+            <p className="text-[10px] text-slate-550 leading-relaxed font-sans">
+              您的持仓浮动盈亏（P/L）将随着上方系统对赌盘口赔率波动的每一次漂移，实现<strong>实时资产核算</strong>。
+            </p>
+
+            {userPortfolioEvaluations.evaluated.length === 0 ? (
+              <p className="text-slate-600 text-[10px] font-mono italic text-center py-4">无活跃预测持仓，请先在滑点演算器进行模拟下注。</p>
+            ) : (
+              <div className="space-y-3">
+                
+                {/* Positions list */}
+                <div className="space-y-2 max-h-[180px] overflow-y-auto no-scrollbar">
+                  {userPortfolioEvaluations.evaluated.map((pos) => {
+                    const isProfit = pos.profitLoss >= 0;
+                    return (
+                      <div key={pos.id} className="bg-slate-900/40 border border-slate-900 p-2.5 rounded-lg font-mono text-[9.5px]">
+                        <div className="flex justify-between items-start gap-1">
+                          <span className="text-slate-205 font-bold truncate max-w-[170px]" title={pos.question}>{pos.question}</span>
+                          <span className={`px-1.5 py-0.5 text-[8px] font-black rounded ${pos.side === "YES" ? "bg-cyan-500/10 text-cyan-400" : "bg-rose-500/10 text-rose-400"}`}>
+                            {pos.side}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between mt-2 text-[8.5px] text-slate-500">
+                          <span>Holding: {pos.shares.toLocaleString()} shares</span>
+                          <span>Cost: ${pos.totalCost.toFixed(0)}</span>
+                        </div>
+
+                        <div className="flex justify-between mt-1 items-center pt-1 border-t border-slate-950/40">
+                          <span className="text-[8.5px] text-slate-500">Current Price: {pos.currentProbability}¢ (Avg entry: {pos.entryProbability}¢)</span>
+                          <span className={`font-mono font-black ${isProfit ? "text-emerald-400" : "text-rose-455"}`}>
+                            {isProfit ? "+" : ""}${pos.profitLoss.toFixed(2)} ({isProfit ? "+" : ""}{pos.profitLossPercent.toFixed(1)}%)
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Aggregate Wealth Summary */}
+                <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg flex items-center justify-between text-[11px] font-mono">
+                  <div>
+                    <span className="text-[8px] text-slate-505 block uppercase">Aggregate value of contract ledger</span>
+                    <span className="text-slate-200 font-bold">Total Assets: ${userPortfolioEvaluations.currentAssetValue.toLocaleString(undefined, { maximumFractionDigits: 1 })} USD</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[8px] text-slate-505 block uppercase">Session P/L</span>
+                    <span className={`font-black ${userPortfolioEvaluations.aggregateProfitLoss >= 0 ? "text-emerald-450" : "text-rose-455"}`}>
+                      {userPortfolioEvaluations.aggregateProfitLoss >= 0 ? "+" : ""}${userPortfolioEvaluations.aggregateProfitLoss.toLocaleString(undefined, { maximumFractionDigits: 1 })} ({userPortfolioEvaluations.roi.toFixed(1)}%)
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+
+          {/* DYNAMIC WHALE LOGS */}
           <div id="polymarket-whale-ledger" className="bg-slate-950 p-5 rounded-2xl border border-slate-900 space-y-4">
             
             <div className="flex items-center justify-between border-b border-slate-900 pb-3">
               <div className="flex items-center gap-2">
-                <History className="h-4 w-4 text-cyan-400" />
+                <History className="h-4.5 w-4.5 text-cyan-400" />
                 <h3 className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                  Live Prediction Inflow Ledger (大户下注实时流水)
+                  Live Action Prediction Feed (大户重仓下注流水)
                 </h3>
               </div>
-              <span className="relative flex h-2 w-2">
+              <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
             </div>
 
             <p className="text-[10px] text-slate-500 font-sans leading-snug">
-              Capturing transaction logs on Polygon of known high-vibe whales acquiring prediction shares sizes &gt; $10,000 USD.
+              监控 Polygon 智能合约上被标记为 DeFi Whale / 流动性大户的大额持平对冲流水（金额大于 $5,000 USD）：
             </p>
 
-            <div className="space-y-2 max-h-[240px] overflow-y-auto no-scrollbar">
+            <div className="space-y-2 max-h-[220px] overflow-y-auto no-scrollbar">
               {liveBets.map((bet) => {
                 const isUserType = bet.whaleLabel.includes("YOU");
                 return (
@@ -950,31 +1915,31 @@ export const PolymarketDeFiHub: React.FC = () => {
                     key={bet.id} 
                     className={`p-2.5 rounded-lg border text-[10px] font-mono transition-all duration-300 relative ${
                       isUserType
-                        ? "bg-cyan-950/20 border-cyan-800/40"
-                        : "bg-slate-900/45 border-slate-900/80 hover:bg-slate-900"
+                        ? "bg-cyan-950/20 border-cyan-800/40 shadow-inner"
+                        : "bg-slate-900/40 border-slate-900 hover:bg-slate-900/60"
                     }`}
                   >
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-300 font-bold block truncate max-w-[120px] uppercase">
+                    <div className="flex justify-between items-center text-[9px]">
+                      <span className="text-slate-300 font-bold block truncate max-w-[130px] uppercase">
                         {bet.whaleLabel}
                       </span>
-                      <span className="text-slate-650 text-[8.5px]">{bet.time}</span>
+                      <span className="text-slate-500 text-[8px]">{bet.time}</span>
                     </div>
 
                     <p className="text-slate-450 mt-1 line-clamp-1 italic text-[9.5px]" title={bet.eventQuestion}>
                       "{bet.eventQuestion}"
                     </p>
 
-                    <div className="flex items-center justify-between mt-1.5 border-t border-slate-900/30 pt-1.5 text-[9px]">
+                    <div className="flex items-center justify-between mt-2 border-t border-slate-900/40 pt-1.5 text-[9px]">
                       <span className="text-slate-500">
-                        Bought: <span className={`font-black font-mono border-b border-dotted ${
-                          bet.prediction === "YES" ? "text-cyan-400 border-cyan-400/20" : "text-rose-455 border-rose-455/20"
+                         Bought (买向): <span className={`font-black font-mono px-1 py-0.2 rounded ${
+                          bet.prediction === "YES" ? "text-cyan-400 bg-cyan-950/40" : "text-rose-400 bg-rose-955/40"
                         }`}>
-                          {bet.sharesCount.toLocaleString()} {bet.prediction} Shares
+                          {bet.prediction}
                         </span>
                       </span>
                       <span className="text-white font-bold">
-                        Cost: ${bet.totalCostUsd.toLocaleString()} USD
+                        Cost (本金): ${bet.totalCostUsd.toLocaleString()} USD
                       </span>
                     </div>
                   </div>
