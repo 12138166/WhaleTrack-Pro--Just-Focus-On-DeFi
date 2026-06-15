@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -26,8 +26,14 @@ import {
   BookOpen,
   PieChart as PieIcon,
   CircleAlert,
-  AlertTriangle
+  AlertTriangle,
+  Download,
+  Zap,
+  Activity,
+  X,
+  Bell
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { 
   BarChart, 
   Bar, 
@@ -61,6 +67,9 @@ interface PolymarketDeFiEvent {
   liquidityPool: number;
   keywords: string[];
   descriptionZh: string;
+  status: "Active" | "Ending Soon" | "Resolved";
+  resolvedOutcome?: "YES" | "NO";
+  transientSurge?: number; // scale multiplier for recent participation (e.g. 1.0 to 1.8)
 }
 
 // 2. Definition of Live Action Feed item
@@ -104,7 +113,8 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
     unresolvedShares: 12500000,
     liquidityPool: 1850000,
     keywords: ["ETH", "Gas", "L2", "Blob", "Scalability", "EIP-4844"],
-    descriptionZh: "主要观测以太坊主网层面的流量流失与 EIP-4844 引入 Blob 后的吞吐量溢出效应，清算或结算标准为 Etherscan 官方每日中值。"
+    descriptionZh: "主要观测以太坊主网层面的流量流失与 EIP-4844 引入 Blob 后的吞吐量溢出效应，清算或结算标准为 Etherscan 官方每日中值。",
+    status: "Active"
   },
   {
     id: "poly-02",
@@ -120,7 +130,8 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
     unresolvedShares: 24800000,
     liquidityPool: 4120000,
     keywords: ["Solana", "TVL", "DeFi", "Raydium", "Jup", "Staking"],
-    descriptionZh: "依据 DeFiLlama 统计数据（包含借贷与流动性质押）。当前 Solana DeFi 处于爆发期，大量空投热度和质押率维持高位。"
+    descriptionZh: "依据 DeFiLlama 统计数据（包含借贷与流动性质押）。当前 Solana DeFi 处于爆发期，大量空投热度和质押率维持高位。",
+    status: "Ending Soon"
   },
   {
     id: "poly-03",
@@ -136,7 +147,8 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
     unresolvedShares: 15400000,
     liquidityPool: 2680050,
     keywords: ["Uniswap", "V4", "Hooks", "DEX", "Volume", "Liquidity"],
-    descriptionZh: "Hooks 架构上线标志着定制流动性集中管理时代的到来。若能将主流资产成功向 V4 热引导，该目标额度预计胜率极大。"
+    descriptionZh: "Hooks 架构上线标志着定制流动性集中管理时代的到来。若能将主流资产成功向 V4 热引导，该目标额度预计胜率极大。",
+    status: "Active"
   },
   {
     id: "poly-04",
@@ -152,7 +164,8 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
     unresolvedShares: 9100000,
     liquidityPool: 1250320,
     keywords: ["PYUSD", "Stablecoin", "PayPal", "Solana", "USDC", "USDT"],
-    descriptionZh: "PayPal 近期通过高收益流动性挖矿和免跨链费用积极推进 Solana 整合，主要竞争对手为 USDC。"
+    descriptionZh: "PayPal 近期通过高收益流动性挖矿和免跨链费用积极推进 Solana 整合，主要竞争对手为 USDC。",
+    status: "Active"
   },
   {
     id: "poly-05",
@@ -168,7 +181,8 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
     unresolvedShares: 31000000,
     liquidityPool: 5900000,
     keywords: ["SEC", "DeFi", "ETF", "Regulation", "Policy", "Compliance"],
-    descriptionZh: "强监管摩擦依然存在。涉及去中心化指数治理代币的证券属性认定是主要拦路虎，目前市场偏向悲观清偿状态。"
+    descriptionZh: "强监管摩擦依然存在。涉及去中心化指数治理代币的证券属性认定是主要拦路虎，目前市场偏向悲观清偿状态。",
+    status: "Active"
   },
   {
     id: "poly-06",
@@ -184,7 +198,8 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
     unresolvedShares: 11000000,
     liquidityPool: 2100000,
     keywords: ["Aave", "Lending", "V4", "L2", "Base", "Optimism", "Arbitrum"],
-    descriptionZh: "针对超薄流动性碎片化的新型统一清算架构研发进展出人意料地顺利，多 L2 初始部署属于其核心卖点。"
+    descriptionZh: "针对超薄流动性碎片化的新型统一清算架构研发进展出人意料地顺利，多 L2 初始部署属于其核心卖点。",
+    status: "Active"
   },
   {
     id: "poly-07",
@@ -200,7 +215,8 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
     unresolvedShares: 7200000,
     liquidityPool: 980000,
     keywords: ["Sky", "Maker", "DAO", "Governance", "MKR", "USDS"],
-    descriptionZh: "Sky 品牌升级导致部分核心散户混淆，创始人 Rune Christensen 曾提出可能存在重新恢复 Maker 品牌的折中提案。"
+    descriptionZh: "Sky 品牌升级导致部分核心散户混淆，创始人 Rune Christensen 曾提出可能存在重新恢复 Maker 品牌的折中提案。",
+    status: "Ending Soon"
   },
   {
     id: "poly-08",
@@ -216,7 +232,44 @@ const CONST_DEFI_EVENTS: PolymarketDeFiEvent[] = [
     unresolvedShares: 18500200,
     liquidityPool: 3100000,
     keywords: ["EigenLayer", "Staking", "Restaking", "Symbiotic", "ETH", "AVS"],
-    descriptionZh: "再质押通过引入多重收益大幅挤占了原生 POS 质押的市场份额，尽管安全层摩擦逐渐暴露，但高收益依然吸金。"
+    descriptionZh: "再质押通过引入多重收益大幅挤占了原生 POS 质押的市场份额，尽管安全层摩擦逐渐暴露，但高收益依然吸金。",
+    status: "Active"
+  },
+  {
+    id: "poly-09",
+    question: "Will Lido's market share of total Ethereum liquid staking drop below 29% before May 31, 2026?",
+    questionZh: "Lido 在以太坊流动性锁仓总量中的占有率是否会在 2026 年 5 月 31 日之前降至 29% 以下？",
+    category: "Staking",
+    totalVolume: 4201000,
+    yesProbability: 0,
+    prev12hProbability: 0,
+    probabilityHistory: [0, 0, 0, 0, 0, 0, 0],
+    endDate: "2026-05-31",
+    tradersCount: 6840,
+    unresolvedShares: 0,
+    liquidityPool: 0,
+    keywords: ["Lido", "Staking", "ETH", "Liquid Staking", "Decentralization"],
+    descriptionZh: "截至 2026 年 5 月 31 日到期，根据 Dune Analytics 跟踪的 Lido 常规市场占比，该项目在此期限前最终保持在 31.2% 的水平，因此该事件最终结算为「NO」。",
+    status: "Resolved",
+    resolvedOutcome: "NO"
+  },
+  {
+    id: "poly-10",
+    question: "Will Uniswap DAO approve a fee-tier fee switch revenue distribution model before April 30, 2026?",
+    questionZh: "Uniswap 去中心化自治组织 (DAO) 是否会在 2026 年 4 月 30 日之前批准费率分层的「费用开关」分红分配方案？",
+    category: "DEX",
+    totalVolume: 11520000,
+    yesProbability: 100,
+    prev12hProbability: 100,
+    probabilityHistory: [100, 100, 100, 100, 100, 100, 100],
+    endDate: "2026-04-30",
+    tradersCount: 15300,
+    unresolvedShares: 0,
+    liquidityPool: 0,
+    keywords: ["Uniswap", "DAO", "Fee Switch", "UNI", "Governance", "Revenue"],
+    descriptionZh: "该提议已于治理层投票中高票通过，UNI 质押持有者按照智能合约规范将获得累计交易摩擦费分配。该事件于 2026 年 4 月 30 日前正式成功通过并执行结算，最终结果为「YES」。",
+    status: "Resolved",
+    resolvedOutcome: "YES"
   }
 ];
 
@@ -292,10 +345,75 @@ const get24hParticipationForEvent = (ev: PolymarketDeFiEvent) => {
     // organic peak hour factor (late afternoon & evening peak)
     const peakFactor = Math.sin((h / 24) * Math.PI * 2 - Math.PI / 2) * 0.35 + 1.1; 
     const wave = Math.sin(h * 0.45 + seed) * 0.12 + Math.cos(h * 0.25 + seed) * 0.08;
-    const count = Math.max(2, Math.round(baseCount * peakFactor * (1 + wave)));
-    data.push({ hour: `${h}h`, count });
+    let count = Math.max(2, Math.round(baseCount * peakFactor * (1 + wave)));
+
+    // Apply transient surge of retail/whale participation if active
+    if (h === 0 && ev.transientSurge) {
+      count = Math.round(count * ev.transientSurge);
+    }
+    
+    // Calculate simulated timestamp/date back from current time
+    const dateObj = new Date();
+    dateObj.setHours(dateObj.getHours() - h);
+    const dateStr = dateObj.toLocaleString("en-US", { 
+      month: "short", 
+      day: "numeric", 
+      hour: "2-digit", 
+      minute: "2-digit",
+      hour12: false
+    });
+
+    // Interpolate simulated price (odds) over the 24 hours based on yesProbability and prev12hProbability
+    let basePrice = ev.yesProbability;
+    if (h <= 12) {
+      const t = h / 12;
+      basePrice = ev.yesProbability * (1 - t) + ev.prev12hProbability * t;
+    } else {
+      const t = (h - 12) / 12;
+      const trend = ev.yesProbability - ev.prev12hProbability;
+      basePrice = ev.prev12hProbability - trend * t;
+    }
+    const priceWave = Math.sin(h * 0.5 + seed) * 1.5 + Math.cos(h * 0.3 + seed) * 1.0;
+    const price = Math.max(1, Math.min(99, Math.round((basePrice + priceWave) * 10) / 10));
+
+    data.unshift({
+      hour: h === 0 ? "Now" : `${h}h ago`,
+      hoursAgo: h,
+      date: dateStr,
+      count,
+      probability: price
+    });
   }
   return data;
+};
+
+// Helper to evaluate detailed growth spike stats for a prediction contract
+const computeEventGrowthSpike = (ev: PolymarketDeFiEvent, threshold: number) => {
+  const series = get24hParticipationForEvent(ev);
+  let maxPercentSurge = 0;
+  let maxAbsSurge = 0;
+  let peakHourStr = "Now";
+  
+  for (let i = 1; i < series.length; i++) {
+    const prev = series[i - 1].count || 1;
+    const curr = series[i].count;
+    const diff = curr - prev;
+    if (diff > 0) {
+      const pct = (diff / prev) * 100;
+      if (pct > maxPercentSurge) {
+        maxPercentSurge = pct;
+        maxAbsSurge = diff;
+        peakHourStr = series[i].hour;
+      }
+    }
+  }
+  
+  return {
+    maxPercentSurge: Math.round(maxPercentSurge * 10) / 10,
+    maxAbsSurge,
+    peakHourStr,
+    isTriggered: maxPercentSurge >= threshold
+  };
 };
 
 export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: string; endDate: string } }> = ({ globalTimeHorizon }) => {
@@ -308,6 +426,13 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
   const [sortBy, setSortBy] = useState<"vol" | "unresolved" | "contested" | "probability">("vol");
   const [showDonutSector, setShowDonutSector] = useState<boolean>(true);
   
+  // Growth Spike & Whale Alert Threshold States
+  const [growthThresholdPercent, setGrowthThresholdPercent] = useState<number>(25);
+  const [onlyShowSpikes, setOnlyShowSpikes] = useState<boolean>(false);
+  
+  // Lifecycle Status Filter State
+  const [statusFilter, setStatusFilter] = useState<"All" | "Active" | "Ending Soon" | "Resolved">("All");
+  
   // Betting Slip State
   const [betSide, setBetSide] = useState<"YES" | "NO">("YES");
   const [betAmountText, setBetAmountText] = useState<string>("1000");
@@ -317,7 +442,7 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
   const [liveBets, setLiveBets] = useState<PolymarketWhaleBet[]>(INITIAL_WHALE_BETS);
 
   // Simulated Session Holdings state!
-  const [userPositions, setUserPositions] = useState<UserPosition[]>([
+  const [userPositions, setUserPositions] = useState<UserPosition[]>( [
     {
       id: "init-hold-01",
       eventId: "poly-02",
@@ -330,12 +455,90 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
     }
   ]);
 
+  // --- Real-time Visual Toast Notification State & Handlers ---
+  interface Toast {
+    id: string;
+    title: string;
+    message: string;
+    type: "spike" | "whale" | "system";
+    eventId?: string;
+    timestamp: Date;
+  }
+
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastedEventsRef = useRef<Record<string, number>>({});
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const addToast = (toast: Omit<Toast, "id" | "timestamp">) => {
+    const id = `toast-${Math.random().toString(36).substring(2, 9)}`;
+    const newToast: Toast = {
+      ...toast,
+      id,
+      timestamp: new Date()
+    };
+    setToasts(prev => [newToast, ...prev].slice(0, 4)); // Maximum 4 active stackable toasts
+    setTimeout(() => {
+      removeToast(id);
+    }, 6500);
+  };
+
+  // Listen to live events and trigger notifications for extreme participant levels (differential surges >= 40%)
+  useEffect(() => {
+    events.forEach(ev => {
+      if (ev.status === "Resolved") return;
+      const spikeInfo = computeEventGrowthSpike(ev, 40); // Standard 'extreme' threshold is 40%
+      if (spikeInfo.isTriggered) {
+        const prevSpike = toastedEventsRef.current[ev.id];
+        // Only trigger toast if the event hasn't been toasted, OR if there's an escalating acceleration surge (+4%+ change)
+        if (prevSpike === undefined || (spikeInfo.maxPercentSurge > prevSpike && spikeInfo.maxPercentSurge - prevSpike >= 4)) {
+          toastedEventsRef.current[ev.id] = spikeInfo.maxPercentSurge;
+          addToast({
+            title: ev.category === "Layer2" ? "⛽ ETHER TRANSIT GAS CLOG WARNING" : `⚡ ${ev.category} CONTRACT METRIC SPIKE`,
+            message: `Contract "${ev.id}" triggered an extreme participant surge of +${spikeInfo.maxPercentSurge}% (+${spikeInfo.maxAbsSurge} traders) in peak hour. Massive liquidity velocity shifting!`,
+            type: "spike",
+            eventId: ev.id
+          });
+        }
+      } else {
+        // Reset toaster lock once the event's peak hour spike falls back down below 32% (cooled down)
+        if (toastedEventsRef.current[ev.id] !== undefined && spikeInfo.maxPercentSurge < 32) {
+          delete toastedEventsRef.current[ev.id];
+        }
+      }
+    });
+  }, [events]);
+
   // --- Dynamic Poller to Simulate Active Order Book ---
   useEffect(() => {
     const timer = setInterval(() => {
-      // 1. Gently slide Yes Probability of random event
+      // 1. Gently slide Yes Probability of random event and simulate dynamic participation surges
       setEvents(prev => {
+        // 18% chance of triggering an extreme social/retail influx on a random active event
+        const shouldTriggerInflux = Math.random() > 0.82;
+        const activeIds = prev.filter(e => e.status !== "Resolved").map(e => e.id);
+        const targetSpikeId = shouldTriggerInflux && activeIds.length > 0 
+          ? activeIds[Math.floor(Math.random() * activeIds.length)] 
+          : null;
+
         return prev.map(ev => {
+          if (ev.status === "Resolved") return ev;
+
+          let finalSurge = ev.transientSurge;
+          let finalTraders = ev.tradersCount;
+
+          if (ev.id === targetSpikeId) {
+            // Extreme surge: 1.45x - 1.70x standard volume, trigger growth spike > 40%
+            finalSurge = 1.46 + Math.random() * 0.22;
+            finalTraders = ev.tradersCount + Math.round(180 + Math.random() * 320); 
+          } else if (finalSurge && finalSurge > 1) {
+            // Gradual social cooling of interest decay
+            finalSurge = Math.max(1, finalSurge - 0.08);
+            if (finalSurge <= 1) finalSurge = undefined;
+          }
+
           if (Math.random() > 0.65) {
             const driftChance = Math.random();
             let delta = 0;
@@ -354,35 +557,52 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
               yesProbability: nextProb,
               probabilityHistory: hist,
               totalVolume: ev.totalVolume + Math.round(Math.random() * 8500),
-              liquidityPool: ev.liquidityPool + Math.round(Math.random() * 2100)
+              liquidityPool: ev.liquidityPool + Math.round(Math.random() * 2100),
+              tradersCount: finalTraders,
+              transientSurge: finalSurge
             };
           }
+
+          // If no probability drift but we have dynamic trader spikes, return updated trackers
+          if (finalTraders !== ev.tradersCount || ev.transientSurge !== finalSurge) {
+            return {
+              ...ev,
+              tradersCount: finalTraders,
+              transientSurge: finalSurge
+            };
+          }
+
           return ev;
         });
       });
 
       // 2. Pop standard random whale predictions to simulate live stream
       if (Math.random() > 0.7) {
-        const randEvent = events[Math.floor(Math.random() * events.length)];
-        const randPrice = Math.random() > 0.55 ? "YES" : "NO";
-        const costSeed = Math.round(5000 + Math.random() * 45000);
-        const buyProb = randPrice === "YES" ? randEvent.yesProbability : (100 - randEvent.yesProbability);
-        const shares = Math.round(costSeed / (buyProb / 100));
+        const activeEvents = events.filter(e => e.status !== "Resolved");
+        if (activeEvents.length > 0) {
+          const randEvent = activeEvents[Math.floor(Math.random() * activeEvents.length)];
+          const randPrice = Math.random() > 0.55 ? "YES" : "NO";
+          const costSeed = Math.round(5000 + Math.random() * 45000);
+          const buyProb = randPrice === "YES" ? randEvent.yesProbability : (100 - randEvent.yesProbability);
+          // Zero divide protection just in case
+          const finalBuyProb = buyProb === 0 ? 1 : buyProb;
+          const shares = Math.round(costSeed / (finalBuyProb / 100));
 
-        const newWhaleBet: PolymarketWhaleBet = {
-          id: `bet-${Date.now()}`,
-          time: "Just Now",
-          txHash: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
-          whaleAddress: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
-          whaleLabel: ["Amber Group", "GSR Markets", "Arbitrage Bot V1", "Multicoin Mirror", "DWF Labs Node", "Wintermute Proxy"][Math.floor(Math.random() * 6)],
-          eventQuestion: randEvent.question,
-          prediction: randPrice,
-          sharesCount: shares,
-          totalCostUsd: costSeed,
-          probabilityAtBet: randEvent.yesProbability
-        };
+          const newWhaleBet: PolymarketWhaleBet = {
+            id: `bet-${Date.now()}`,
+            time: "Just Now",
+            txHash: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
+            whaleAddress: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
+            whaleLabel: ["Amber Group", "GSR Markets", "Arbitrage Bot V1", "Multicoin Mirror", "DWF Labs Node", "Wintermute Proxy"][Math.floor(Math.random() * 6)],
+            eventQuestion: randEvent.question,
+            prediction: randPrice,
+            sharesCount: shares,
+            totalCostUsd: costSeed,
+            probabilityAtBet: randEvent.yesProbability
+          };
 
-        setLiveBets(prev => [newWhaleBet, ...prev.slice(0, 5)]);
+          setLiveBets(prev => [newWhaleBet, ...prev.slice(0, 5)]);
+        }
       }
     }, 5000);
 
@@ -521,6 +741,16 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
     };
   }, [events]);
 
+  // Dynamic Event Status Counts for Segmented Tabs
+  const statusCounts = useMemo(() => {
+    return {
+      All: events.length,
+      Active: events.filter(e => e.status === "Active").length,
+      "Ending Soon": events.filter(e => e.status === "Ending Soon").length,
+      Resolved: events.filter(e => e.status === "Resolved").length,
+    };
+  }, [events]);
+
   // --- Search and Category and Tag Filtering Matrix with Sorting ---
   const filteredEvents = useMemo(() => {
     const matched = events.filter(e => {
@@ -537,7 +767,10 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
           : selectedTags.some(t => e.keywords.includes(t))
       );
 
-      return matchCategory && matchSearch && matchTag;
+      const matchSpike = !onlyShowSpikes || computeEventGrowthSpike(e, growthThresholdPercent).isTriggered;
+      const matchStatus = statusFilter === "All" || e.status === statusFilter;
+
+      return matchCategory && matchSearch && matchTag && matchSpike && matchStatus;
     });
 
     // Sorting block
@@ -556,7 +789,7 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
     }
 
     return matched;
-  }, [events, selectedCategory, searchQuery, selectedTags, tagFilterMode, sortBy]);
+  }, [events, selectedCategory, searchQuery, selectedTags, tagFilterMode, sortBy, onlyShowSpikes, growthThresholdPercent, statusFilter]);
 
   // --- Category Volume Breakdown Data for Donut Chart ---
   const categoryChartData = useMemo(() => {
@@ -619,6 +852,10 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
   // --- Calculate simulated bet results and add to portfolio list ---
   const handleBuySharesSimulation = (e: React.FormEvent) => {
     e.preventDefault();
+    if (activeEvent.status === "Resolved") {
+      setBetFeedbackMsg({ status: "error", text: "该合约已经解决结算（Resolved），无法继续买入新的测试持仓。" });
+      return;
+    }
     const parsedAmount = parseFloat(betAmountText);
     if (isNaN(parsedAmount) || parsedAmount <= 1) {
       setBetFeedbackMsg({ status: "error", text: "输入金额需大于 $1。" });
@@ -686,6 +923,200 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
     };
 
     setLiveBets(prev => [myMockWhaleBet, ...prev]);
+  };
+
+  // --- Data Export Utilities ---
+  
+  // Reusable CSV Download helper
+  const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
+    const content = [
+      headers.join(","),
+      ...rows.map(row => 
+        row.map(val => {
+          if (val === undefined || val === null) return '""';
+          const str = String(val).replace(/"/g, '""');
+          return `"${str}"`;
+        }).join(",")
+      )
+    ].join("\n");
+    
+    // UTF-8 BOM to support Chinese characters in Excel
+    const blob = new Blob(["\ufeff" + content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 1. Export Word Cloud (Keyword frequency and accumulated volumes)
+  const exportWordCloudData = () => {
+    const headers = ["Keyword (关键词)", "Mention Frequency (出现频次)", "Cumulative Betting Volume (累计交易量-USD)", "Sector (二级板块/分类)"];
+    const rows = keywordAggregations.map(kw => [
+      kw.text,
+      kw.value,
+      kw.cumulativeVolume,
+      kw.sector
+    ]);
+    downloadCSV("Polymarket_DeFi_WordCloud_Keywords.csv", headers, rows);
+  };
+
+  // 2. Export Discussion Heat & Gamble Rank
+  const exportHeatRankData = () => {
+    const headers = ["Rank (排名)", "Keyword (关键词)", "Separated Contracts (涉及独立合同数)", "Cumulative Volume (累计投注金额-USD)"];
+    const rows = keywordAggregations.map((kw, idx) => [
+      idx + 1,
+      kw.text,
+      kw.value,
+      kw.cumulativeVolume
+    ]);
+    downloadCSV("Polymarket_DeFi_Gamble_Heat_Ranking.csv", headers, rows);
+  };
+
+  // 3. Export Sector stakes / Key word Tag Volume
+  const exportSectorStakesData = () => {
+    if (showDonutSector) {
+      // Calculate sector volume allocations
+      const sectorAllocations: { [key: string]: number } = {};
+      events.forEach(ev => {
+        sectorAllocations[ev.category] = (sectorAllocations[ev.category] || 0) + ev.totalVolume;
+      });
+      const headers = ["Sector (板块分类)", "Total Stakes Volume (锁定投注总额-USD)", "Percentage (占比)"];
+      const totalVolSum = Object.values(sectorAllocations).reduce((a, b) => a + b, 0) || 1;
+      const rows = Object.entries(sectorAllocations).map(([sector, vol]) => [
+        sector,
+        vol,
+        `${((vol / totalVolSum) * 100).toFixed(1)}%`
+      ]);
+      downloadCSV("Polymarket_DeFi_Sector_Stakes_Allocation.csv", headers, rows);
+    } else {
+      // Top Keyword volumes
+      const headers = ["Keyword Tag (关联大类标签)", "Total Bet Weight (总对赌权重金额-USD)"];
+      const rows = keywordAggregations.slice(0, 7).map(item => [
+        item.text,
+        item.cumulativeVolume
+      ]);
+      downloadCSV("Polymarket_DeFi_Tag_Volume_Weights.csv", headers, rows);
+    }
+  };
+
+  // 4. Export Filtered Events Matrix
+  const exportFilteredEventsData = () => {
+    const headers = [
+      "Event ID (事件ID)",
+      "Question EN (英文问题描述)",
+      "Question ZH (中文问题描述)",
+      "Category (二级板块)",
+      "YES Probability/Odds % (当前YES胜率)",
+      "Prev 12h Probability (前12h胜率)",
+      "Change Delta % (对赌情绪偏移动态)",
+      "Total Active Volume USD (下注池金额)",
+      "Liquidity Pool Depth (流动性池金库)",
+      "Traders/Gamblers (累计对赌用户)",
+      "Unresolved Shares (待结算份额)",
+      "Keywords (索引标签)"
+    ];
+    const rows = filteredEvents.map(ev => {
+      const delta = ev.yesProbability - ev.prev12hProbability;
+      const keywordsStr = ev.keywords.join(", ");
+      return [
+        ev.id,
+        ev.question,
+        ev.questionZh,
+        ev.category,
+        ev.yesProbability,
+        ev.prev12hProbability,
+        `${delta >= 0 ? "+" : ""}${delta}%`,
+        ev.totalVolume,
+        ev.liquidityPool,
+        ev.tradersCount,
+        ev.unresolvedShares,
+        keywordsStr
+      ];
+    });
+    downloadCSV("Polymarket_DeFi_Filtered_Predictives_Matrix.csv", headers, rows);
+  };
+
+  // 5. Export Active Event Spectrum (Historical over selected date range and 24h trend details)
+  const exportCurrentEventFullDetails = () => {
+    const headers = [
+      "Target Date (每日时空断点)",
+      "YES Probability % (YES 胜率赔率走势)",
+      "Simulated Daily Participants (日活跃博弈账户数)",
+      "Current Active Event ID",
+      "Current Active Event EN",
+      "Current Active Event ZH"
+    ];
+    const rows = activeEventHistoricalOdds.map(point => [
+      point.date,
+      point.probability,
+      point.participants,
+      activeEvent.id,
+      activeEvent.question,
+      activeEvent.questionZh
+    ]);
+    downloadCSV(`Polymarket_Event_${activeEvent.id}_Historical_Details.csv`, headers, rows);
+  };
+
+  // 6. Export Simulated Portfolio Holdings
+  const exportSimulatedHoldingsData = () => {
+    const headers = [
+      "Position ID (持仓编号)",
+      "Event ID (事件编号)",
+      "Betting Question (下注预测描述)",
+      "Subscribed Side (对赌方向)",
+      "Bought Price (买入持仓单价 ¢)",
+      "Purchased Shares (买入合约份额)",
+      "Total Entry Cost USD (投入结算本金)",
+      "Current Odds/Price % (当前市场单价 ¢)",
+      "Floating Profit/Loss (当前持仓浮动盈亏)",
+      "Return on Investment (投资回报率 ROI)"
+    ];
+    const rows = userPortfolioEvaluations.evaluated.map(pos => [
+      pos.id,
+      pos.eventId,
+      pos.question,
+      pos.side,
+      `${pos.entryProbability}¢`,
+      pos.shares,
+      pos.totalCost,
+      `${pos.currentProbability}¢`,
+      `$${pos.profitLoss.toFixed(2)}`,
+      `${pos.profitLossPercent.toFixed(1)}%`
+    ]);
+    downloadCSV("Polymarket_DeFi_Simulated_Session_Holdings.csv", headers, rows);
+  };
+
+  // 7. Export Live Action Bets / Whale Alerts feed
+  const exportLiveBetsData = () => {
+    const headers = [
+      "Bet ID (订单流水号)",
+      "Time (模拟检测时间)",
+      "TX Hash (智能合约交易哈希)",
+      "Trader Address (交易者账户地址)",
+      "Institution/Whale Label (主力/巨鲸标签)",
+      "Prediction Side (对赌方向)",
+      "Filled Shares (买入合约份额)",
+      "Capital Used USD (对赌金额-USD)",
+      "Market Price At Fill (成交赔率)",
+      "Prediction Question (对赌合同项目)"
+    ];
+    const rows = liveBets.map(bet => [
+      bet.id,
+      bet.time,
+      bet.txHash,
+      bet.whaleAddress,
+      bet.whaleLabel,
+      bet.prediction,
+      bet.sharesCount,
+      bet.totalCostUsd,
+      `${bet.probabilityAtBet}%`,
+      bet.eventQuestion
+    ]);
+    downloadCSV("Polymarket_DeFi_Whale_Action_Prediction_Feed.csv", headers, rows);
   };
 
   return (
@@ -786,7 +1217,18 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                   Interactive Word Cloud (预测词频关联网图)
                 </h3>
               </div>
-              <span className="text-[8px] font-mono text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-900/50 uppercase">Multi-Select</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  title="Export Word Cloud Data (导出词频数据)"
+                  onClick={exportWordCloudData}
+                  className="p-1 text-slate-400 hover:text-cyan-400 border border-slate-800 hover:border-cyan-900/50 hover:bg-cyan-950/20 rounded cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  <span className="text-[7.5px] font-mono font-bold">CSV</span>
+                </button>
+                <span className="text-[8px] font-mono text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-900/50 uppercase">Multi-Select</span>
+              </div>
             </div>
 
             <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
@@ -919,7 +1361,18 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                   Discussion Heat & Gamble Rank (博弈池词频与投注榜)
                 </h3>
               </div>
-              <span className="text-[8px] font-mono text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-900/50 uppercase">By Traded Vol</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  title="Export Heat Rank Data (导出热度榜数据)"
+                  onClick={exportHeatRankData}
+                  className="p-1 text-slate-400 hover:text-amber-450 border border-slate-800 hover:border-amber-900/50 hover:bg-amber-950/20 rounded cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  <span className="text-[7.5px] font-mono font-bold">CSV</span>
+                </button>
+                <span className="text-[8px] font-mono text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-900/50 uppercase">By Traded Vol</span>
+              </div>
             </div>
 
             <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
@@ -1027,13 +1480,24 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                 </h3>
               </div>
               
-              <button
-                type="button"
-                onClick={() => setShowDonutSector(!showDonutSector)}
-                className="text-[8px] font-mono text-cyan-400 border border-cyan-800/60 bg-cyan-950/20 hover:bg-cyan-950/60 px-1.5 py-0.5 rounded cursor-pointer transition-all shrink-0"
-              >
-                {showDonutSector ? "标签排行" : "板块资金分布"}
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  title="Export Sector stakes / Keyword Tag Volume (导出资金配比数据)"
+                  onClick={exportSectorStakesData}
+                  className="p-1 text-slate-400 hover:text-cyan-400 border border-slate-800 hover:border-cyan-900/50 hover:bg-cyan-950/20 rounded cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  <span className="text-[7.5px] font-mono font-bold">CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDonutSector(!showDonutSector)}
+                  className="text-[8px] font-mono text-cyan-400 border border-cyan-800/60 bg-cyan-950/20 hover:bg-cyan-950/60 px-1.5 py-0.5 rounded cursor-pointer transition-all shrink-0"
+                >
+                  {showDonutSector ? "标签排行" : "板块资金分布"}
+                </button>
+              </div>
             </div>
 
             <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
@@ -1175,29 +1639,83 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
             </div>
             
             {/* Sort selection for optimal metrics analysis */}
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                title="Export Filtered Events Matrix (导出事件矩阵)"
+                onClick={exportFilteredEventsData}
+                className="p-1 px-1.5 text-slate-400 hover:text-orange-400 border border-slate-800 hover:border-orange-900/50 hover:bg-orange-950/20 rounded-md cursor-pointer transition-all flex items-center gap-1"
+              >
+                <Download className="h-3 w-3 text-orange-500" />
+                <span className="text-[8px] font-mono font-bold">Export CSV</span>
+              </button>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-mono text-slate-500">排序:</span>
+                <div className="flex bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
+                  {[
+                    { id: "vol", name: "Stakes Vol" },
+                    { id: "contested", name: "Dispute胶着度" },
+                    { id: "unresolved", name: "Shares" },
+                    { id: "probability", name: "YES Odds" }
+                  ].map(s => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSortBy(s.id as any)}
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold cursor-pointer transition ${
+                        sortBy === s.id
+                          ? "bg-slate-950 text-cyan-400 border border-slate-800"
+                          : "text-slate-500 hover:text-slate-300 border border-transparent"
+                      }`}
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Lifecycle Stage Filter Segmented Tabs */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-905 border border-slate-900 rounded-xl p-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-[9px] font-mono text-slate-500">排序:</span>
-              <div className="flex bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
-                {[
-                  { id: "vol", name: "Stakes Vol" },
-                  { id: "contested", name: "Dispute胶着度" },
-                  { id: "unresolved", name: "Shares" },
-                  { id: "probability", name: "YES Odds" }
-                ].map(s => (
+              <ListFilter className="h-3.5 w-3.5 text-cyan-400" />
+              <div className="space-y-0.5">
+                <span className="text-[9px] font-mono font-bold text-slate-350 block uppercase tracking-wider">
+                  Event Stage Filters (生命周期矩阵筛选)
+                </span>
+                <span className="text-[7.5px] text-slate-500 font-sans block">
+                  Organize target predictions by their operational phase
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5 shrink-0">
+              {[
+                { id: "All", name: "All / 全部", count: statusCounts.All, color: "from-blue-600/15 to-indigo-600/15 border-blue-900/60 text-blue-400 bg-blue-950/10 shadow-blue-900/10 hover:border-blue-700/50" },
+                { id: "Active", name: "Active / 进行中", count: statusCounts.Active, color: "from-emerald-600/15 to-teal-600/15 border-emerald-900/60 text-emerald-400 bg-emerald-950/10 shadow-emerald-900/10 hover:border-emerald-700/50" },
+                { id: "Ending Soon", name: "Ending Soon / 临近到期", count: statusCounts["Ending Soon"], color: "from-amber-600/15 to-orange-600/15 border-amber-900/60 text-amber-400 bg-amber-950/10 shadow-amber-950/10 hover:border-amber-700/50" },
+                { id: "Resolved", name: "Resolved / 已结算", count: statusCounts.Resolved, color: "from-purple-600/15 to-fuchsia-600/15 border-purple-900/60 text-purple-400 bg-purple-950/10 shadow-purple-950/10 hover:border-purple-700/50" }
+              ].map(t => {
+                const isActive = statusFilter === t.id;
+                return (
                   <button
-                    key={s.id}
+                    key={t.id}
                     type="button"
-                    onClick={() => setSortBy(s.id as any)}
-                    className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold cursor-pointer transition ${
-                      sortBy === s.id
-                        ? "bg-slate-950 text-cyan-400 border border-slate-800"
-                        : "text-slate-500 hover:text-slate-300 border border-transparent"
+                    onClick={() => setStatusFilter(t.id as any)}
+                    className={`px-3 py-1 bg-slate-900/40 rounded-lg border text-[9px] font-mono font-bold cursor-pointer transition-all flex items-center gap-1.5 ${
+                      isActive
+                        ? `bg-gradient-to-r ${t.color} font-black shadow-lg ring-1 ring-white/10`
+                        : "bg-slate-900/30 border-slate-850 text-slate-500 hover:text-slate-350 hover:border-slate-800 border-transparent"
                     }`}
                   >
-                    {s.name}
+                    <span>{t.name}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full font-sans text-[8px] font-extrabold ${isActive ? "bg-slate-950 text-white" : "bg-slate-950 text-slate-600"}`}>
+                      {t.count}
+                    </span>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </div>
 
@@ -1237,6 +1755,82 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
             </div>
           </div>
 
+          {/* ⚡ INTEGRATED SPECTRUM: DYNAMIC GROWTH SPIKE & WHALE ACTIVITY ALERTER */}
+          <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-3.5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-950/45 rounded-lg border border-emerald-900/55 text-emerald-400 shrink-0">
+                <Activity className="h-4 w-4 text-emerald-400 animate-pulse animate-duration-1000" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-mono font-extrabold text-slate-150 uppercase tracking-wider">Growth Spike Engine (博弈增速引擎)</span>
+                  <span className="text-[7.5px] font-mono text-emerald-400 bg-emerald-950/40 leading-none px-1.5 py-0.5 rounded border border-emerald-900/30 font-bold uppercase tracking-widest">Active</span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-normal">
+                  Identifies contracts with sudden participant growth. Highlights potential whale activity & concentrated liquidity impact.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto text-[10px] font-mono shrink-0">
+              {/* Presets */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-500 text-[8.5px] uppercase font-bold">Alert:</span>
+                <div className="flex bg-slate-950 border border-slate-850 p-0.5 rounded-lg">
+                  {[
+                    { name: "Normal (15%+)", pct: 15 },
+                    { name: "Whale (25%+)", pct: 25 },
+                    { name: "Extreme (40%+)", pct: 40 }
+                  ].map(preset => (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      onClick={() => setGrowthThresholdPercent(preset.pct)}
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-black cursor-pointer transition ${
+                        growthThresholdPercent === preset.pct
+                          ? "bg-slate-900 text-emerald-400 border border-slate-800"
+                          : "text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Slider for custom threshold */}
+              <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-850">
+                <span className="text-[8.5px] text-slate-500 uppercase">Trigger:</span>
+                <span className="text-[9.5px] font-bold font-mono text-emerald-400 w-9 text-right">
+                  {growthThresholdPercent}%
+                </span>
+                <input
+                  type="range"
+                  min="10"
+                  max="60"
+                  step="5"
+                  value={growthThresholdPercent}
+                  onChange={(e) => setGrowthThresholdPercent(Number(e.target.value))}
+                  className="w-14 h-1 bg-slate-850 rounded-lg appearance-none cursor-pointer accent-emerald-400 transition"
+                />
+              </div>
+
+              {/* Filter toggle */}
+              <button
+                type="button"
+                onClick={() => setOnlyShowSpikes(!onlyShowSpikes)}
+                className={`px-2 py-1.5 rounded-lg border text-[9px] font-mono font-bold cursor-pointer transition flex items-center gap-1 ${
+                  onlyShowSpikes
+                    ? "bg-emerald-950/60 border-emerald-500/30 text-emerald-400"
+                    : "bg-slate-950 border-slate-850 text-slate-400 hover:text-slate-100"
+                }`}
+              >
+                <Zap className={`h-3 w-3 ${onlyShowSpikes ? "text-emerald-400 animate-bounce" : "text-slate-500"}`} />
+                <span>Alert Filter ({events.filter(e => computeEventGrowthSpike(e, growthThresholdPercent).isTriggered).length})</span>
+              </button>
+            </div>
+          </div>
+
           {/* Grid display of prediction cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredEvents.length === 0 ? (
@@ -1249,6 +1843,9 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                 const probDelta = ev.yesProbability - ev.prev12hProbability;
                 const isDeltaPositive = probDelta >= 0;
 
+                // Compute detailed growth spike stats
+                const spike = computeEventGrowthSpike(ev, growthThresholdPercent);
+
                 // Necessary Variable: Tension index indicating uncertainty level of this debate.
                 // 50% is peak tension (absolute disagreement), while 10% or 90% are relaxed values.
                 const disagreementLevel = 100 - (Math.abs(ev.yesProbability - 50) * 2);
@@ -1260,24 +1857,34 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                       setSelectedEventId(ev.id);
                       setBetFeedbackMsg({ status: "idle", text: "" });
                     }}
-                    className={`bg-slate-900/20 p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none space-y-4 flex flex-col justify-between hover:scale-[1.01] ${
+                    className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer select-none space-y-4 flex flex-col justify-between hover:scale-[1.01] ${
                       isSelected
                         ? "border-cyan-500/40 bg-slate-900/45 shadow-lg shadow-cyan-950/10 ring-1 ring-cyan-500/10"
-                        : "border-slate-900 hover:border-slate-800 hover:bg-slate-900/20"
+                        : spike.isTriggered
+                          ? "border-emerald-800 bg-emerald-950/10 shadow-lg shadow-emerald-950/15 hover:border-emerald-600 hover:bg-emerald-950/20"
+                          : "border-slate-900 hover:border-slate-800 hover:bg-slate-900/20 bg-slate-900/20"
                     }`}
                   >
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <span 
-                          className="px-2 py-0.5 text-[7px] font-extrabold uppercase border rounded font-mono"
-                          style={{ 
-                            color: CATEGORY_COLORS[ev.category], 
-                            borderColor: `${CATEGORY_COLORS[ev.category]}25`,
-                            backgroundColor: `${CATEGORY_COLORS[ev.category]}10`
-                          }}
-                        >
-                          {ev.category}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span 
+                            className="px-2 py-0.5 text-[7px] font-extrabold uppercase border rounded font-mono shrink-0"
+                            style={{ 
+                              color: CATEGORY_COLORS[ev.category], 
+                              borderColor: `${CATEGORY_COLORS[ev.category]}25`,
+                              backgroundColor: `${CATEGORY_COLORS[ev.category]}10`
+                            }}
+                          >
+                            {ev.category}
+                          </span>
+                          {spike.isTriggered && (
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[7px] font-black uppercase text-emerald-450 bg-emerald-950/40 rounded border border-emerald-900/50 animate-pulse shrink-0">
+                              <Zap className="h-2 w-2 text-emerald-400 shrink-0 fill-emerald-400/20" />
+                              SURGE +{spike.maxPercentSurge}%
+                            </span>
+                          )}
+                        </div>
                         
                         <div className="flex items-center gap-2 font-mono text-[8.5px] text-slate-500">
                           <div className="flex items-center gap-1">
@@ -1286,9 +1893,32 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                           </div>
                           
                           {/* Tiny 24hr sparkline chart */}
-                          <div className="w-12 h-3.5 relative" title="24-hour hourly dual-stake participation trend">
+                          <div className="w-16 h-5 relative" title="24-hour hourly dual-stake participation trend">
                             <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart data={get24hParticipationForEvent(ev)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                              <AreaChart data={get24hParticipationForEvent(ev)} margin={{ top: 1, right: 1, left: 1, bottom: 1 }}>
+                                <Tooltip
+                                  allowEscapeViewBox={{ x: true, y: true }}
+                                  cursor={{ stroke: '#475569', strokeWidth: 1 }}
+                                  content={({ active, payload }) => {
+                                    if (active && payload && payload.length) {
+                                      const data = payload[0].payload;
+                                      return (
+                                        <div className="bg-slate-950/95 border border-slate-850 p-1.5 rounded shadow-2xl font-mono text-[8px] text-slate-300 space-y-0.5 pointer-events-none z-50 min-w-[125px]">
+                                          <p className="text-white font-bold border-b border-slate-800 pb-0.5 mb-1">{data.date}</p>
+                                          <p className="text-indigo-400 font-semibold flex items-center justify-between gap-2">
+                                            <span>Traders:</span>
+                                            <span>{data.count.toLocaleString()}</span>
+                                          </p>
+                                          <p className="text-cyan-400 font-semibold flex items-center justify-between gap-2">
+                                            <span>Odds:</span>
+                                            <span>{data.probability}% ({data.probability}¢)</span>
+                                          </p>
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                />
                                 <Area 
                                   type="monotone" 
                                   dataKey="count" 
@@ -1322,14 +1952,29 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                       <div className="flex items-end justify-between">
                         <div className="space-y-0.5">
                           <span className="text-[8px] text-slate-500 uppercase font-black tracking-wider block">YES Winning Odds (胜出概率)</span>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-xl font-black font-mono text-cyan-400">
-                              {ev.yesProbability}%
-                            </span>
-                            <span className={`text-[9.5px] font-bold ${isDeltaPositive ? "text-emerald-400" : "text-rose-400"} flex items-center`}>
-                              {isDeltaPositive ? "▲" : "▼"}{Math.abs(probDelta)}% (12h)
-                            </span>
-                          </div>
+                          {ev.status === "Resolved" ? (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[9px] bg-purple-950 text-purple-400 px-1.5 py-0.5 rounded border border-purple-900/40 font-black tracking-widest uppercase font-mono">
+                                RESOLVED
+                              </span>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded border font-black uppercase font-mono ${
+                                ev.resolvedOutcome === "YES" 
+                                  ? "bg-cyan-950 border-cyan-800/40 text-cyan-400" 
+                                  : "bg-rose-950 border-rose-800/40 text-rose-400"
+                              }`}>
+                                OUTCOME: {ev.resolvedOutcome}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-xl font-black font-mono text-cyan-400">
+                                {ev.yesProbability}%
+                              </span>
+                              <span className={`text-[9.5px] font-bold ${isDeltaPositive ? "text-emerald-400" : "text-rose-400"} flex items-center`}>
+                                {isDeltaPositive ? "▲" : "▼"}{Math.abs(probDelta)}% (12h)
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Sparkline for Probability */}
@@ -1340,7 +1985,7 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                               <Line 
                                 type="monotone" 
                                 dataKey="val" 
-                                stroke={ev.yesProbability > 50 ? "#06b6d4" : "#f43f5e"} 
+                                stroke={ev.status === "Resolved" ? "#a855f7" : ev.yesProbability > 50 ? "#06b6d4" : "#f43f5e"} 
                                 strokeWidth={1.5} 
                                 dot={false} 
                                 isAnimationActive={false}
@@ -1354,18 +1999,35 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                       <div className="space-y-1">
                         <div className="h-1 bg-slate-950 rounded-full overflow-hidden flex">
                           <div 
-                            className="bg-cyan-400 transition-all duration-300"
-                            style={{ width: `${ev.yesProbability}%` }}
+                            className={`${ev.status === "Resolved" ? (ev.resolvedOutcome === "YES" ? "bg-cyan-500 w-full" : "bg-slate-800 w-0") : "bg-cyan-400 transition-all duration-300"}`}
+                            style={ev.status === "Resolved" ? {} : { width: `${ev.yesProbability}%` }}
                           ></div>
                           <div 
-                            className="bg-rose-500 transition-all duration-300 flex-1"
+                            className={`${ev.status === "Resolved" ? (ev.resolvedOutcome === "NO" ? "bg-rose-500 w-full" : "bg-slate-800 w-0") : "bg-rose-500 transition-all duration-300 flex-1"}`}
                           ></div>
                         </div>
                         <div className="flex justify-between items-center text-[7.5px] font-mono text-slate-650">
-                          <span>Buy YES cost: {ev.yesProbability}¢</span>
-                          <span>分歧激烈度 Index: <span className="text-rose-400 font-bold">{disagreementLevel}%</span></span>
+                          {ev.status === "Resolved" ? (
+                            <span>Settled Date: {ev.endDate}</span>
+                          ) : (
+                            <span>Buy YES cost: {ev.yesProbability}¢</span>
+                          )}
+                          <span>分歧激烈度 Index: <span className="text-rose-400 font-bold">{ev.status === "Resolved" ? "0%" : `${disagreementLevel}%`}</span></span>
                         </div>
                       </div>
+
+                      {/* Growth Surge Tracker subtext */}
+                      {spike.isTriggered && (
+                        <div className="bg-emerald-950/20 border border-emerald-900/15 rounded-lg p-2 flex items-center justify-between text-[8px] font-mono leading-tight">
+                          <span className="text-emerald-500 font-bold flex items-center gap-1 uppercase tracking-tight">
+                            <Activity className="h-2.5 w-2.5 text-emerald-400 animate-pulse" />
+                            Hourly Peak Surge:
+                          </span>
+                          <span className="text-emerald-400 font-extrabold">
+                            +{spike.maxPercentSurge}% (+{spike.maxAbsSurge} Traders)
+                          </span>
+                        </div>
+                      )}
 
                       {/* Info lines undercard */}
                       <div className="flex justify-between items-center text-[8.5px] font-mono text-slate-500 pt-1 border-t border-slate-900/40">
@@ -1396,7 +2058,18 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                   Detailed Focal Deep Dive (单标的高级博弈解密)
                 </h3>
               </div>
-              <span className="text-[8px] bg-cyan-950 text-cyan-400 px-1 py-0.5 rounded font-mono">Focal Analytics</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  title="Export Active Event Historical Spectrum & Details (导出本案历史时间走势)"
+                  onClick={exportCurrentEventFullDetails}
+                  className="p-1 text-slate-400 hover:text-cyan-400 border border-slate-800 hover:border-cyan-900/50 hover:bg-cyan-950/20 rounded cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  <span className="text-[7.5px] font-mono font-bold">CSV</span>
+                </button>
+                <span className="text-[8px] bg-cyan-950 text-cyan-400 px-1 py-0.5 rounded font-mono font-bold">Focal Analytics</span>
+              </div>
             </div>
 
             <div className="space-y-2 bg-slate-900/30 p-3 rounded-lg border border-slate-900/80">
@@ -1522,13 +2195,21 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                           </linearGradient>
                         </defs>
                         <Tooltip
+                          allowEscapeViewBox={{ x: true, y: true }}
                           content={({ active, payload }) => {
                             if (active && payload && payload.length) {
                               const data = payload[0].payload;
                               return (
-                                <div className="bg-slate-950 border border-slate-900 p-1.5 rounded font-mono text-[8.5px] text-slate-300">
-                                  <p className="text-white font-bold">{data.hour} ago</p>
-                                  <p className="text-indigo-300 font-extrabold">{data.count} Traders/h</p>
+                                <div className="bg-slate-950 border border-slate-900 p-2 rounded shadow-xl font-mono text-[8.5px] text-slate-300 space-y-0.5">
+                                  <p className="text-white font-bold border-b border-slate-800 pb-0.5 mb-1">{data.date}</p>
+                                  <p className="text-indigo-400 font-extrabold flex items-center justify-between gap-3">
+                                    <span>Traders/h:</span>
+                                    <span>{data.count.toLocaleString()} Accounts</span>
+                                  </p>
+                                  <p className="text-cyan-400 font-semibold flex items-center justify-between gap-3">
+                                    <span>YES Price:</span>
+                                    <span>{data.probability}% ({data.probability}¢)</span>
+                                  </p>
                                 </div>
                               );
                             }
@@ -1555,6 +2236,64 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                   </div>
                 </div>
               </div>
+
+              {/* Live Growth Spike Analytics */}
+              {(() => {
+                const activeSpike = computeEventGrowthSpike(activeEvent, growthThresholdPercent);
+                return (
+                  <div className={`p-3 rounded-xl border ${
+                    activeSpike.isTriggered 
+                      ? "bg-emerald-950/15 border-emerald-500/30 shadow-md shadow-emerald-950/10" 
+                      : "bg-slate-900/60 border-slate-900"
+                  } space-y-2`}>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[8px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                        activeSpike.isTriggered ? "text-emerald-400" : "text-slate-500"
+                      }`}>
+                        <Activity className={`h-2.5 w-2.5 ${activeSpike.isTriggered ? "text-emerald-400 animate-pulse" : "text-slate-500"}`} />
+                        Live Growth Spike Analytics
+                      </span>
+                      
+                      {activeSpike.isTriggered ? (
+                        <span className="text-[7px] font-black font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-900/30 animate-pulse">
+                          🐳 DETECTED SPIKE
+                        </span>
+                      ) : (
+                        <span className="text-[7px] font-bold font-mono text-slate-500">
+                          Consolidated Growth
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono leading-relaxed">
+                      <div className="bg-slate-950/60 p-1.5 rounded border border-slate-900/80">
+                        <span className="text-[7px] text-slate-500 uppercase block">Max Surge (24h)</span>
+                        <span className={`text-[10.5px] font-black ${
+                          activeSpike.isTriggered ? "text-emerald-400" : "text-slate-350"
+                        }`}>
+                          +{activeSpike.maxPercentSurge}%
+                        </span>
+                      </div>
+                      
+                      <div className="bg-slate-950/60 p-1.5 rounded border border-slate-900/80">
+                        <span className="text-[7px] text-slate-500 uppercase block">Spike Peak Hour</span>
+                        <span className="text-[9.5px] font-bold text-slate-300 block truncate" title={`${activeSpike.peakHourStr}`}>
+                          {activeSpike.peakHourStr}
+                        </span>
+                      </div>
+                    </div>
+
+                    {activeSpike.isTriggered && (
+                      <p className="text-[8.5px] text-emerald-300 leading-normal font-sans bg-emerald-950/10 p-1.5 rounded border border-emerald-900/20 flex gap-1.5 items-start">
+                        <Zap className="h-3 w-3 text-emerald-400 shrink-0 mt-0.5" />
+                        <span>
+                          Detected <strong>+{activeSpike.maxAbsSurge}</strong> new accounts entering within a single hour frame. Signifies severe liquidity impact or high whale participant activity on {activeEvent.id}.
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
               
               {/* Dynamic Market Resolution Score & Sentiment Index */}
               <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-900 space-y-2">
@@ -1720,88 +2459,123 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
               </div>
             </div>
 
-            <form onSubmit={handleBuySharesSimulation} className="space-y-4">
-              
-              {/* YES vs NO Selector */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setBetSide("YES")}
-                  className={`py-2 px-3 rounded-xl border text-xs font-mono font-bold transition-all uppercase cursor-pointer text-center ${
-                    betSide === "YES"
-                      ? "bg-cyan-500/10 border-cyan-500/50 text-cyan-400 shadow-lg shadow-cyan-950/20"
-                      : "bg-slate-900 border-slate-900 text-slate-500 hover:text-slate-350"
-                  }`}
-                >
-                  Buy YES ({activeEvent.yesProbability}¢)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBetSide("NO")}
-                  className={`py-2 px-3 rounded-xl border text-xs font-mono font-bold transition-all uppercase cursor-pointer text-center ${
-                    betSide === "NO"
-                      ? "bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-lg shadow-rose-950/20"
-                      : "bg-slate-900 border-slate-900 text-slate-500 hover:text-slate-350"
-                  }`}
-                >
-                  Buy NO ({100 - activeEvent.yesProbability}¢)
-                </button>
-              </div>
-
-              {/* Amount input */}
-              <div className="space-y-1.5 font-mono">
-                <div className="flex justify-between text-[8px] text-slate-500 font-bold uppercase">
-                  <span>Investment Size (投入结算本金):</span>
-                  <span>Free play quota: $100,000 USD</span>
+            {activeEvent.status === "Resolved" ? (
+              <div className="bg-purple-950/20 border border-purple-900/40 p-4 rounded-xl text-center space-y-3 font-mono">
+                <Check className="h-7 w-7 text-purple-400 mx-auto bg-purple-950 p-1.5 rounded-full border border-purple-800/60" />
+                <div>
+                  <span className="block text-[10px] font-black text-purple-400 uppercase tracking-widest leading-none mb-1">
+                    Settled Prediction Contract (标的已结算)
+                  </span>
+                  <span className="text-[7.5px] text-slate-550 block">SIMULATION ENVIRONMENT LOG CLOSED</span>
                 </div>
-                <div className="flex items-center bg-slate-900 border border-slate-900 rounded-lg p-2.5">
-                  <span className="text-slate-500 text-xs font-bold mr-1.5">$</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100000"
-                    value={betAmountText}
-                    onChange={(e) => {
-                      setBetAmountText(e.target.value);
-                      setBetFeedbackMsg({ status: "idle", text: "" });
-                    }}
-                    className="bg-transparent border-0 flex-1 p-0 text-xs text-white focus:ring-0 focus:outline-none"
-                  />
-                  <span className="text-slate-400 text-[9px] font-bold">USD</span>
-                </div>
-              </div>
-
-              {/* Immediate Mathematics Panel */}
-              {parseFloat(betAmountText) > 0 && (
-                <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-900 text-[10px] space-y-1.5 font-mono">
-                  <div className="flex justify-between items-center text-slate-500">
-                    <span>Average price per share (每份单价):</span>
-                    <span>${(betSide === "YES" ? activeEvent.yesProbability / 100 : (100 - activeEvent.yesProbability) / 100).toFixed(2)}</span>
+                
+                <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-900 text-left text-[9px] leading-relaxed space-y-2 text-slate-400">
+                  <div className="flex justify-between items-center border-b border-slate-850 pb-1.5 text-slate-500">
+                    <span>Resolution Date (结算日期):</span>
+                    <span className="text-slate-300 font-bold">{activeEvent.endDate}</span>
                   </div>
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>Estimated purchased shares (预核发份额):</span>
-                    <span className="text-white font-bold">
-                      {Math.round((parseFloat(betAmountText) || 0) / ((betSide === "YES" ? activeEvent.yesProbability : (100 - activeEvent.yesProbability)) / 100)).toLocaleString()} Shares
+                  <div className="flex justify-between items-center border-b border-slate-850 pb-1.5">
+                    <span>Ultimate Market Verdict (终审结算结果):</span>
+                    <span className={`px-2 py-0.5 rounded font-black text-[10px] ${
+                      activeEvent.resolvedOutcome === "YES" 
+                        ? "bg-cyan-950/80 text-cyan-400 border border-cyan-900/40" 
+                        : "bg-rose-950/80 text-rose-400 border border-rose-900/40"
+                    }`}>
+                      {activeEvent.resolvedOutcome}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center text-slate-450 border-t border-slate-905 pt-2">
-                    <span>Potential resolution payout (全对估结金):</span>
-                    <span className="text-emerald-400 font-extrabold text-[12px] animate-pulse">
-                      ${Math.round((parseFloat(betAmountText) || 0) / ((betSide === "YES" ? activeEvent.yesProbability : (100 - activeEvent.yesProbability)) / 100)).toLocaleString()}.00 USD
-                    </span>
+                  <p className="font-sans text-[8.5px] leading-normal text-slate-400">
+                    {activeEvent.descriptionZh}
+                  </p>
+                </div>
+                <div className="text-[8.5px] text-slate-500 font-sans">
+                  Further prediction positions can not be acquired for resolved contracts. Please choose an active contract to play.
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleBuySharesSimulation} className="space-y-4">
+                
+                {/* YES vs NO Selector */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBetSide("YES")}
+                    className={`py-2 px-3 rounded-xl border text-xs font-mono font-bold transition-all uppercase cursor-pointer text-center ${
+                      betSide === "YES"
+                        ? "bg-cyan-500/10 border-cyan-500/50 text-cyan-400 shadow-lg shadow-cyan-950/20"
+                        : "bg-slate-900 border-slate-900 text-slate-500 hover:text-slate-350"
+                    }`}
+                  >
+                    Buy YES ({activeEvent.yesProbability}¢)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBetSide("NO")}
+                    className={`py-2 px-3 rounded-xl border text-xs font-mono font-bold transition-all uppercase cursor-pointer text-center ${
+                      betSide === "NO"
+                        ? "bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-lg shadow-rose-950/20"
+                        : "bg-slate-900 border-slate-900 text-slate-500 hover:text-slate-350"
+                    }`}
+                  >
+                    Buy NO ({100 - activeEvent.yesProbability}¢)
+                  </button>
+                </div>
+
+                {/* Amount input */}
+                <div className="space-y-1.5 font-mono">
+                  <div className="flex justify-between text-[8px] text-slate-500 font-bold uppercase">
+                    <span>Investment Size (投入结算本金):</span>
+                    <span>Free play quota: $100,000 USD</span>
+                  </div>
+                  <div className="flex items-center bg-slate-900 border border-slate-900 rounded-lg p-2.5">
+                    <span className="text-slate-500 text-xs font-bold mr-1.5">$</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100000"
+                      value={betAmountText}
+                      onChange={(e) => {
+                        setBetAmountText(e.target.value);
+                        setBetFeedbackMsg({ status: "idle", text: "" });
+                      }}
+                      className="bg-transparent border-0 flex-1 p-0 text-xs text-white focus:ring-0 focus:outline-none"
+                    />
+                    <span className="text-slate-400 text-[9px] font-bold">USD</span>
                   </div>
                 </div>
-              )}
 
-              {/* Action Button */}
-              <button
-                type="submit"
-                id="submit-prediction-btn"
-                className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-mono text-xs font-bold uppercase rounded-lg shadow-xl shadow-cyan-950/20 active:scale-[0.98] transition-all cursor-pointer"
-              >
-                Execute Mock Share Acquisition (虚拟下注买入)
-              </button>
-            </form>
+                {/* Immediate Mathematics Panel */}
+                {parseFloat(betAmountText) > 0 && (
+                  <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-900 text-[10px] space-y-1.5 font-mono">
+                    <div className="flex justify-between items-center text-slate-500">
+                      <span>Average price per share (每份单价):</span>
+                      <span>${(betSide === "YES" ? activeEvent.yesProbability / 100 : (100 - activeEvent.yesProbability) / 100).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>Estimated purchased shares (预核发份额):</span>
+                      <span className="text-white font-bold">
+                        {Math.round((parseFloat(betAmountText) || 0) / ((betSide === "YES" ? activeEvent.yesProbability : (100 - activeEvent.yesProbability)) / 100)).toLocaleString()} Shares
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-450 border-t border-slate-905 pt-2">
+                      <span>Potential resolution payout (全对估结金):</span>
+                      <span className="text-emerald-400 font-extrabold text-[12px] animate-pulse">
+                        ${Math.round((parseFloat(betAmountText) || 0) / ((betSide === "YES" ? activeEvent.yesProbability : (100 - activeEvent.yesProbability)) / 100)).toLocaleString()}.00 USD
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Button */}
+                <button
+                  type="submit"
+                  id="submit-prediction-btn"
+                  className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-mono text-xs font-bold uppercase rounded-lg shadow-xl shadow-cyan-950/20 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  Execute Mock Share Acquisition (虚拟下注买入)
+                </button>
+              </form>
+            )}
 
             {/* Simulated execution callback notifications */}
             {betFeedbackMsg.status !== "idle" && (
@@ -1826,9 +2600,25 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                   My Active Session Holdings (我的模拟预测持仓)
                 </h3>
               </div>
-              <span className="text-[8.5px] font-mono text-emerald-400 bg-emerald-950/40 px-1 py-0.5 rounded border border-emerald-900">
-                P/L Connected
-              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  title="Export Simulated Holdings Portfolio (导出模拟持仓对账单)"
+                  onClick={exportSimulatedHoldingsData}
+                  disabled={userPortfolioEvaluations.evaluated.length === 0}
+                  className={`p-1 flex items-center gap-1 border rounded transition-all cursor-pointer ${
+                    userPortfolioEvaluations.evaluated.length > 0 
+                      ? "text-slate-400 hover:text-emerald-400 border-slate-800 hover:border-emerald-950/20" 
+                      : "text-slate-700 border-transparent cursor-not-allowed"
+                  }`}
+                >
+                  <Download className="h-3 w-3" />
+                  <span className="text-[7.5px] font-mono font-bold">CSV</span>
+                </button>
+                <span className="text-[8.5px] font-mono text-emerald-400 bg-emerald-950/40 px-1 py-0.5 rounded border border-emerald-900">
+                  P/L Connected
+                </span>
+              </div>
             </div>
 
             <p className="text-[10px] text-slate-550 leading-relaxed font-sans">
@@ -1897,10 +2687,21 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
                   Live Action Prediction Feed (大户重仓下注流水)
                 </h3>
               </div>
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  title="Export Live Whale bets feed (导出大户下注流水明细)"
+                  onClick={exportLiveBetsData}
+                  className="p-1 text-slate-400 hover:text-cyan-400 border border-slate-800 hover:border-cyan-900/50 hover:bg-cyan-950/20 rounded cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  <span className="text-[7.5px] font-mono font-bold">CSV</span>
+                </button>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+              </div>
             </div>
 
             <p className="text-[10px] text-slate-500 font-sans leading-snug">
@@ -1950,6 +2751,69 @@ export const PolymarketDeFiHub: React.FC<{ globalTimeHorizon?: { startDate: stri
 
         </div>
 
+      </div>
+
+      {/* 🔔 FLOATING REAL-TIME TOAST NOTIFICATION CONTAINER (Extreme Particle Influx Alerts) */}
+      <div id="polymarket-spike-toasts" className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        <AnimatePresence>
+          {toasts.map(toast => (
+            <motion.div
+              key={toast.id}
+              layout
+              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+              onClick={() => {
+                if (toast.eventId) {
+                  setSelectedEventId(toast.eventId);
+                  const element = document.getElementById("polymarket-prediction-slip");
+                  if (element) {
+                    element.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }
+                }
+              }}
+              className="pointer-events-auto bg-slate-950/95 border border-emerald-500/30 shadow-2xl shadow-emerald-950/40 p-4 rounded-xl flex items-start gap-3 backdrop-blur-md cursor-pointer hover:border-emerald-500/60 transition-all group relative overflow-hidden"
+            >
+              {/* Subtle green ambient lighting in the card corner */}
+              <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/5 rounded-full blur-xl pointer-events-none"></div>
+              
+              <div className="p-2 bg-emerald-950/60 rounded-lg border border-emerald-500/20 text-emerald-400 group-hover:scale-110 transition-transform shrink-0">
+                <Zap className="h-4 w-4 fill-emerald-400/10 text-emerald-400 animate-pulse" />
+              </div>
+              
+              <div className="flex-1 min-w-0 pr-4 space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[7.5px] font-black tracking-widest font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/20 uppercase">
+                    SPIKE ALERT
+                  </span>
+                  <span className="text-[7.5px] text-slate-500 font-mono">
+                    {toast.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+                <h4 className="text-[10px] font-bold font-mono text-slate-200 mt-0.5 uppercase tracking-tight">
+                  {toast.title}
+                </h4>
+                <p className="text-[9px] text-slate-400 leading-normal font-sans">
+                  {toast.message}
+                </p>
+                <span className="text-[7.5px] font-mono text-emerald-400 font-black flex items-center gap-1 group-hover:translate-x-1 transition-transform mt-1">
+                  Click to view details / 详情查看 <ArrowRight className="h-2 w-2" />
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation(); // prevent selecting the event
+                  removeToast(toast.id);
+                }}
+                className="absolute top-3 right-3 text-slate-505 hover:text-slate-300 p-0.5 hover:bg-slate-900 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
     </div>
