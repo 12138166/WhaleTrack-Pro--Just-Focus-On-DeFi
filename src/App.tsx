@@ -24,7 +24,8 @@ import {
   ArrowRight,
   Flame,
   Shield,
-  Sparkles
+  Sparkles,
+  Twitter
 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, YAxis } from "recharts";
 import { CURATED_WHALES } from "./data";
@@ -41,6 +42,7 @@ import { DeFiLlamaProtocolsHub } from "./components/DeFiLlamaProtocolsHub";
 import { ChainConsensusEducationalDeck } from "./components/ChainConsensusEducationalDeck";
 import { WhaleMevDetector } from "./components/WhaleMevDetector";
 import { PolymarketDeFiHub } from "./components/PolymarketDeFiHub";
+import { MaskMuskHub } from "./components/MaskMuskHub";
 
 // Generate realistic starting sequence representing fluctuations in preceding 15 minutes of trading activity
 const generateInitialMockHistory = (basePrice: number, change24h: number): number[] => {
@@ -625,9 +627,19 @@ export default function App() {
                 setActiveSection("polymarket");
                 scrollToId("global-time-horizon-picker");
               }} 
-              className="text-xs font-mono text-sky-400 hover:text-sky-305 hover:underline flex-shrink-0 font-bold cursor-pointer animate-pulse"
+              className="text-xs font-mono text-sky-400 hover:text-sky-305 hover:underline flex-shrink-0 font-bold cursor-pointer"
             >
               POLYMARKET DEFI 🔮
+            </button>
+            <span className="text-slate-850 text-xs hidden sm:inline">•</span>
+            <button 
+              onClick={() => {
+                setActiveSection("musk");
+                scrollToId("global-time-horizon-picker");
+              }} 
+              className="text-xs font-mono text-indigo-400 hover:text-indigo-300 hover:underline flex-shrink-0 font-bold cursor-pointer animate-pulse"
+            >
+              MASK & MUSK HUB 🌌
             </button>
           </div>
         </div>
@@ -793,6 +805,7 @@ export default function App() {
               { id: "simulator", name: "Slippage Simulator", icon: AlertTriangle, accent: "border-sky-500/50 bg-sky-950/25 text-sky-300 font-bold" },
               { id: "mev", name: "MEV Bot Tracker", icon: Flame, accent: "border-rose-550/60 bg-rose-950/35 text-rose-300 font-extrabold shadow shadow-rose-550/20" },
               { id: "polymarket", name: "Polymarket DeFi", icon: Sparkles, accent: "border-sky-500/60 bg-sky-950/35 text-sky-300 font-extrabold shadow shadow-sky-500/20" },
+              { id: "musk", name: "MASK & Musk Hub 🌌", icon: Twitter, accent: "border-indigo-500/60 bg-indigo-950/35 text-indigo-300 font-extrabold shadow shadow-indigo-550/20 animate-pulse" },
               { id: "glossary", name: "Consensus Whitepaper", icon: FileText, accent: "border-teal-500/60 bg-teal-950/35 text-teal-300 font-black font-extrabold shadow shadow-teal-550/20" }
             ].map((tab) => {
               const TabIcon = tab.icon;
@@ -1155,6 +1168,32 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* 13. MASK Network & Elon Musk Intelligence Hub */}
+                <div className="bg-slate-905 border border-slate-850 rounded-xl p-5 hover:border-slate-705 hover:scale-[1.01] hover:shadow-indigo-950/10 transition-all flex flex-col justify-between group md:col-span-2 lg:col-span-3 border-t-indigo-600 border-t-2 relative">
+                  <div className="absolute top-0 right-0 w-64 h-full bg-indigo-500/5 rounded-full blur-[60px] pointer-events-none"></div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-850/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-indigo-950/30 border border-indigo-900 text-indigo-400 rounded-lg">
+                          <Twitter className="h-4 w-4 fill-indigo-400/10" strokeWidth={1} />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-slate-100 uppercase">MASK & Elon Musk Hub</span>
+                      </div>
+                      <span className="text-[9px] bg-indigo-950/60 border border-indigo-900/50 text-indigo-400 font-mono font-bold px-1.5 py-0.5 rounded">EXCLUSIVE SPECIAL</span>
+                    </div>
+                    <p className="text-xs text-slate-350 font-sans leading-relaxed">
+                      Only focuses on Mask / Elon Musk. Browse public updates/tweets, map critical orbit characters (Trump, Vivek, Vitalik), and simulation-hack market reactions.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveSection("musk"); scrollToId("global-time-horizon-picker"); }}
+                    className="mt-4 flex items-center justify-between text-[11px] font-mono text-indigo-350 font-bold hover:text-indigo-200 border border-indigo-900 hover:border-indigo-850 bg-slate-950 py-2 px-3 rounded-lg hover:bg-slate-900 transition-all cursor-pointer w-full"
+                  >
+                    <span>Inspect Musk System / 马斯克圈专题</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-indigo-350 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+
               </div>
             </div>
           )}
@@ -1464,6 +1503,34 @@ export default function App() {
                 </button>
               </div>
               <PolymarketDeFiHub globalTimeHorizon={globalTimeHorizon} />
+            </div>
+          )}
+
+          {/* 13. MASK NETWORK & ELON MUSK SYSTEM INTELLIGENCE HUB */}
+          {activeSection === "musk" && (
+            <div id="mask-musk-view" className="space-y-2">
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-805 rounded-xl px-4 py-2.5 font-mono text-[11px] text-slate-300 shadow-md">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                  </span>
+                  <span className="font-extrabold tracking-wider uppercase text-slate-200">
+                    MASK & ELON MUSK INTEL FEED & SIMULATOR
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setActiveSection("overview"); scrollToId("global-time-horizon-picker"); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 bg-slate-950 hover:text-white font-mono text-[10px] cursor-pointer text-slate-300"
+                >
+                  <Minimize2 className="h-3.5 w-3.5 text-amber-400" />
+                  <span>⬅ BACK TO OPERATIONS</span>
+                </button>
+              </div>
+              <MaskMuskHub 
+                globalStartDate={globalTimeHorizon.startDate} 
+                globalEndDate={globalTimeHorizon.endDate} 
+              />
             </div>
           )}
 

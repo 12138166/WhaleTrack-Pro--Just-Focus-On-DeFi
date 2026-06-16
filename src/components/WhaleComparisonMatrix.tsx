@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { WhaleWallet, WalletAICognition, TickerPrice } from "../types";
 import { CURATED_WHALES } from "../data";
+import { PredictiveLiquidityHeatmap } from "./PredictiveLiquidityHeatmap";
 import {
   BarChart,
   Bar,
@@ -408,6 +409,9 @@ export const WhaleComparisonMatrix: React.FC<WhaleComparisonMatrixProps> = ({
           </div>
         ))}
       </div>
+
+      {/* 🔮 D3-based predictive flow heatmap component */}
+      <PredictiveLiquidityHeatmap />
 
       {/* 24-Hour Trading Volume Bar Chart Section */}
       {(() => {
