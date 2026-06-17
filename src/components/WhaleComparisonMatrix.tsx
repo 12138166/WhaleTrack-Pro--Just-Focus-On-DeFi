@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Users, 
   Copy, 
@@ -9,7 +9,8 @@ import {
   ShieldCheck, 
   ArrowRight,
   TrendingDown,
-  Coins
+  Coins,
+  Clock
 } from "lucide-react";
 import { WhaleWallet, WalletAICognition, TickerPrice } from "../types";
 import { CURATED_WHALES } from "../data";
@@ -148,6 +149,29 @@ const WHALE_AI_COGNITION: Record<string, WalletAICognition> = {
   }
 };
 
+interface HistoricalPoint {
+  hour: number;
+  amount: number;
+  percentChange: number;
+}
+
+const generate24hHistory = (baseAmount: number): HistoricalPoint[] => {
+  const points: HistoricalPoint[] = [];
+  let currentVal = baseAmount;
+  for (let h = 0; h < 24; h++) {
+    // gentle random deviation of -1.5% to +1.8%
+    const change = (Math.random() - 0.46) * 0.024;
+    currentVal = Math.max(1, Math.round(currentVal * (1 + change)));
+    const percentChange = baseAmount > 0 ? ((currentVal - baseAmount) / baseAmount) * 100 : 0;
+    points.push({
+      hour: h,
+      amount: currentVal,
+      percentChange
+    });
+  }
+  return points;
+};
+
 interface WhaleComparisonMatrixProps {
   onAnalyzeWallet: (wallet: WhaleWallet) => void;
   onSimulateImpact: (asset: string, defaultAmount: number) => void;
@@ -163,18 +187,9 @@ export const WhaleComparisonMatrix: React.FC<WhaleComparisonMatrixProps> = ({
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [expandedAIAddress, setExpandedAIAddress] = useState<string | null>(null);
 
-  const handleCopy = (address: string) => {
-    navigator.clipboard.writeText(address);
-    setCopiedAddress(address);
-    setTimeout(() => setCopiedAddress(null), 2000);
-  };
-
-  const filteredWhales = selectedNetwork === "ALL" 
-    ? CURATED_WHALES 
-    : CURATED_WHALES.filter(w => w.network === selectedNetwork);
-
-  // Network stats comparing concentration and features
-  const networkCharacteristics = [
+  // Promote whales and network characteristics into state for real-time sandbox simulation
+  const [whales, setWhales] = useState<WhaleWallet[]>(CURATED_WHALES);
+  const [characteristics, setCharacteristics] = useState([
     { asset: "BTC", type: "High-cap", supplyConcentration: "11.2%", avgHoldDuration: "4.2 Years", liquidityDepth: "$8.5B", pattern: "Absolute cold storage, OTC swaps, low staking activity" },
     { asset: "ETH", type: "High-cap", supplyConcentration: "38.5%", avgHoldDuration: "1.8 Years", liquidityDepth: "$4.2B", pattern: "Staking validator contracts, multi-sig bridges, DAO locks" },
     { asset: "SOL", type: "High-cap", supplyConcentration: "48.2%", avgHoldDuration: "8.2 Months", liquidityDepth: "$1.2B", pattern: "High DEX trade speeds, active validator delegation, MEV bot feeds" },
@@ -186,19 +201,183 @@ export const WhaleComparisonMatrix: React.FC<WhaleComparisonMatrixProps> = ({
     { asset: "DAI", type: "Crypto-Backed Stablecoin", supplyConcentration: "51.2%", avgHoldDuration: "4.2 Months", liquidityDepth: "$2.15B", pattern: "Over-collateralized loans, algorithmic peg stability modules (PSM)" },
     { asset: "USDe", type: "Synthetic Stablecoin", supplyConcentration: "68.3%", avgHoldDuration: "1.5 Months", liquidityDepth: "$2.84B", pattern: "Delta-neutral spot-futures shorting hedges, high elastic funding arbitrage" },
     { asset: "PAXG", type: "Commodity Stablecoin", supplyConcentration: "15.4%", avgHoldDuration: "1.5 Years", liquidityDepth: "$0.18B", pattern: "Gold bullion backed tokenization, gold price tracking inflation hedges" }
-  ];
+  ]);
+
+  const [recentUpdates, setRecentUpdates] = useState<Record<string, { direction: "up" | "down"; timestamp: number; deltaPercent: number }>>({});
+  const [whaleHistories, setWhaleHistories] = useState<Record<string, HistoricalPoint[]>>({});
+  const [hoveredPoint, setHoveredPoint] = useState<{ address: string; index: number; pt: HistoricalPoint } | null>(null);
+
+  // Seed initial 24h historical logs for each whale once on mount
+  useEffect(() => {
+    const initialHistories: Record<string, HistoricalPoint[]> = {};
+    CURATED_WHALES.forEach(whale => {
+      const baseAmt = whale.assetBalances[0]?.amount || 1000;
+      initialHistories[whale.address] = generate24hHistory(baseAmt);
+    });
+    setWhaleHistories(initialHistories);
+  }, []);
+
+  // Real-time dynamic updates simulating macro on-chain balance swaps
+  useEffect(() => {
+    const updateTimer = setInterval(() => {
+      // Pick a random whale
+      const randomIndex = Math.floor(Math.random() * whales.length);
+      const targetWhale = whales[randomIndex];
+      if (!targetWhale) return;
+
+      const isUp = Math.random() > 0.45; // 55% chance of accumulation, 45% redistribution
+      const percentValue = (Math.random() * 4.6 + 1.4); // 1.4% to 6.0% balance shift
+      const percentDelta = percentValue / 100;
+      const deltaFactor = isUp ? (1 + percentDelta) : (1 - percentDelta);
+      const directionStr = isUp ? "up" : "down";
+
+      // Update primary asset details
+      const updatedAssetBalances = targetWhale.assetBalances.map((bal, idx) => {
+        if (idx === 0) {
+          return {
+            ...bal,
+            amount: Math.round(bal.amount * deltaFactor),
+            valueUsd: Math.round(bal.valueUsd * deltaFactor)
+          };
+        }
+        return bal;
+      });
+
+      const firstBal = updatedAssetBalances[0];
+      const newInitialBalance = firstBal 
+        ? `${Math.round(firstBal.amount).toLocaleString()} ${firstBal.symbol}` 
+        : targetWhale.initialBalance;
+
+      setWhales(prevWhales => prevWhales.map((w, idx) => {
+        if (idx === randomIndex) {
+          return {
+            ...w,
+            assetBalances: updatedAssetBalances,
+            initialBalance: newInitialBalance,
+            txCount: w.txCount + 1
+          };
+        }
+        return w;
+      }));
+
+      // Update 24h history live (the final 'Current' live bucket at index 23)
+      setWhaleHistories(prevHist => {
+        const targetHist = prevHist[targetWhale.address];
+        if (!targetHist) return prevHist;
+        const newHist = [...targetHist];
+        const lastIndex = newHist.length - 1;
+        if (lastIndex >= 0) {
+          const originalPoint = newHist[lastIndex];
+          const updatedAmount = Math.max(1, Math.round(originalPoint.amount * deltaFactor));
+          const baselineAmount = newHist[0]?.amount || updatedAmount;
+          const percentChange = baselineAmount > 0 ? ((updatedAmount - baselineAmount) / baselineAmount) * 100 : 0;
+          newHist[lastIndex] = {
+            ...originalPoint,
+            amount: updatedAmount,
+            percentChange
+          };
+        }
+        return {
+          ...prevHist,
+          [targetWhale.address]: newHist
+        };
+      });
+
+      const activeSymbol = firstBal?.symbol || "BTC";
+
+      setCharacteristics(prevChars => prevChars.map(char => {
+        if (char.asset === activeSymbol) {
+          const prevPct = parseFloat(char.supplyConcentration);
+          let newPct = prevPct * (isUp ? (1 + percentDelta * 0.2) : (1 - percentDelta * 0.2));
+          if (newPct < 5) newPct = 5.25;
+          if (newPct > 95) newPct = 94.75;
+
+          const depthNum = parseFloat(char.liquidityDepth.replace(/[$,B,M]/g, ""));
+          const depthMultiplier = isUp ? (1 + percentDelta * 0.35) : (1 - percentDelta * 0.35);
+          const newDepthVal = depthNum * depthMultiplier;
+
+          return {
+            ...char,
+            supplyConcentration: `${newPct.toFixed(2)}%`,
+            liquidityDepth: `$${newDepthVal.toFixed(2)}B`
+          };
+        }
+        return char;
+      }));
+
+      const timestamp = Date.now();
+      setRecentUpdates(prev => ({
+        ...prev,
+        [targetWhale.address]: { direction: directionStr, timestamp, deltaPercent: percentValue },
+        [activeSymbol]: { direction: directionStr, timestamp, deltaPercent: percentValue }
+      }));
+    }, 4500);
+
+    return () => clearInterval(updateTimer);
+  }, [whales]);
+
+  // Styling helper for subtle card/cell flashes
+  const getFlashStyle = (key: string) => {
+    const update = recentUpdates[key];
+    if (!update) return "transition-all duration-1000";
+    const elapsed = Date.now() - update.timestamp;
+    if (elapsed > 4000) return "transition-all duration-1000";
+
+    if (update.direction === "up") {
+      return "bg-emerald-950/70 text-emerald-400 font-semibold border-emerald-500/40 shadow-[inset_0_0_12px_rgba(16,185,129,0.30)] transition-all duration-150 rounded px-1.5 py-0.5";
+    } else {
+      return "bg-rose-950/70 text-rose-400 font-semibold border-rose-500/40 shadow-[inset_0_0_12px_rgba(244,63,94,0.30)] transition-all duration-150 rounded px-1.5 py-0.5";
+    }
+  };
+
+  // Inline Arrow and delta indicators
+  const getTrendIndicator = (key: string) => {
+    const update = recentUpdates[key];
+    if (!update) return null;
+    const elapsed = Date.now() - update.timestamp;
+    if (elapsed > 4000) return null;
+
+    return update.direction === "up" ? (
+      <span className="inline-flex items-center text-[10px] font-bold text-emerald-400 ml-1.5 animate-pulse bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">
+        ▲ +{update.deltaPercent.toFixed(1)}%
+      </span>
+    ) : (
+      <span className="inline-flex items-center text-[10px] font-bold text-rose-400 ml-1.5 animate-pulse bg-rose-500/10 px-1 py-0.2 rounded border border-rose-500/20">
+        ▼ -{update.deltaPercent.toFixed(1)}%
+      </span>
+    );
+  };
+
+  const handleCopy = (address: string) => {
+    navigator.clipboard.writeText(address);
+    setCopiedAddress(address);
+    setTimeout(() => setCopiedAddress(null), 2000);
+  };
+
+  const filteredWhales = selectedNetwork === "ALL" 
+    ? whales 
+    : whales.filter(w => w.network === selectedNetwork);
+
+  // Network stats comparing concentration and features
+  const networkCharacteristics = characteristics;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl p-5 space-y-6" id="whale-matrix-section">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <h2 className="text-lg font-mono font-bold tracking-tight text-slate-100 flex items-center gap-2">
-            <Coins className="h-5 w-5 text-amber-500" />
+            <Coins className="h-5 w-5 text-amber-500 animate-pulse" />
             WHALE DIRECTORY & COMPARISON PANEL
           </h2>
           <p className="text-xs text-slate-400">
             Compare macro-wallet supply distributions, holdings metrics, and risk signatures between stablecoins and high-caps.
           </p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-emerald-400 bg-emerald-950/40 border border-emerald-900/60 px-2 py-0.5 rounded shadow-[0_0_4px_rgba(16,185,129,0.15)]">
+              Real-Time balance feeds live
+            </span>
+          </div>
         </div>
 
         {/* Network filters */}
@@ -281,23 +460,127 @@ export const WhaleComparisonMatrix: React.FC<WhaleComparisonMatrixProps> = ({
 
             {/* Core facts */}
             <div className="grid grid-cols-3 gap-2 py-1 text-center font-mono">
-              <div className="bg-slate-900/40 p-2 rounded border border-slate-900/50">
-                <span className="text-[9px] text-slate-500 block uppercase">Balance Sum</span>
-                <span className="text-xs text-slate-100 font-bold">{whale.initialBalance.split(" ")[0]}</span>
+              <div className={`p-2 rounded border transition-all duration-1000 flex flex-col justify-between ${
+                recentUpdates[whale.address] 
+                  ? getFlashStyle(whale.address) 
+                  : "bg-slate-900/40 border-slate-900/50"
+              }`}>
+                <span className="text-[9px] text-slate-500 block uppercase font-bold">Balance Sum</span>
+                <div className="flex flex-col items-center">
+                  <span className="text-xs text-slate-100 font-extrabold whitespace-nowrap">
+                    {whale.initialBalance.split(" ")[0]}
+                  </span>
+                  <span className="text-[9px] text-slate-400 uppercase font-semibold">
+                    {whale.initialBalance.split(" ")[1] || whale.assetBalances[0]?.symbol}
+                  </span>
+                </div>
+                {getTrendIndicator(whale.address)}
               </div>
-              <div className="bg-slate-900/40 p-2 rounded border border-slate-900/50">
-                <span className="text-[9px] text-slate-500 block uppercase">Wallet Age</span>
-                <span className="text-xs text-slate-200 font-bold">{whale.age}</span>
+              <div className="bg-slate-900/40 p-2 rounded border border-slate-900/50 flex flex-col justify-between">
+                <span className="text-[9px] text-slate-500 block uppercase font-bold">Wallet Age</span>
+                <span className="text-xs text-slate-200 font-bold mt-1">{whale.age}</span>
               </div>
-              <div className="bg-slate-900/40 p-2 rounded border border-slate-900/50">
-                <span className="text-[9px] text-slate-500 block uppercase">Transactions</span>
-                <span className="text-xs text-slate-200 font-bold">{whale.txCount.toLocaleString()}</span>
+              <div className="bg-slate-900/40 p-2 rounded border border-slate-900/50 flex flex-col justify-between">
+                <span className="text-[9px] text-slate-500 block uppercase font-bold">Transactions</span>
+                <span className="text-xs text-slate-200 font-bold mt-1">{whale.txCount.toLocaleString()}</span>
               </div>
             </div>
 
             <p className="text-[11px] text-slate-400 font-mono line-clamp-2 italic bg-slate-900/20 px-2 py-1 rounded min-h-[36px]">
               &ldquo;{whale.notes}&rdquo;
             </p>
+
+            {/* 24h Historical Holdings Heatmap */}
+            {(() => {
+              const historyPoints = whaleHistories[whale.address] || [];
+              const hoverDetail = hoveredPoint?.address === whale.address ? hoveredPoint : null;
+              const selectedPoint = hoverDetail ? hoverDetail.pt : (historyPoints[23] || null);
+
+              if (historyPoints.length === 0) return null;
+
+              return (
+                <div className="bg-slate-950/80 p-3 rounded-lg border border-slate-800/80 space-y-2">
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className="text-slate-300 uppercase tracking-wider font-bold inline-flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
+                      24h HOLDINGS HISTORICAL HEATMAP
+                    </span>
+                    <span className="text-slate-400 font-semibold bg-slate-900 border border-slate-800 px-1.5 py-0.2 rounded text-[9px]">
+                      {hoverDetail ? `${24 - hoverDetail.index}h ago` : "LIVE SNAP"}
+                    </span>
+                  </div>
+
+                  {/* Heatmap Blocks */}
+                  <div className="flex items-center gap-[3px] justify-between py-1">
+                    {historyPoints.map((pt, index) => {
+                      // Color scale matching % fluctuation relative to the 24h ago baseline
+                      let cellColor = "bg-slate-800/60 border-slate-900";
+                      const pct = pt.percentChange;
+                      
+                      if (pct > 2.8) {
+                        cellColor = "bg-emerald-400 border-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.4)]";
+                      } else if (pct > 1.2) {
+                        cellColor = "bg-emerald-600 border-emerald-700";
+                      } else if (pct > 0.3) {
+                        cellColor = "bg-emerald-800 border-emerald-900";
+                      } else if (pct < -2.8) {
+                        cellColor = "bg-rose-500 border-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.4)]";
+                      } else if (pct < -1.2) {
+                        cellColor = "bg-rose-700 border-rose-800";
+                      } else if (pct < -0.3) {
+                        cellColor = "bg-rose-900 border-rose-950";
+                      }
+
+                      const isCurrent = index === 23;
+
+                      return (
+                        <div
+                          key={index}
+                          className={`flex-1 h-3.5 rounded-xs border cursor-crosshair transition-all duration-150 ${cellColor} ${
+                            isCurrent ? "relative overflow-visible border-cyan-400/85 bg-cyan-950/10" : ""
+                          } ${
+                            hoveredPoint?.address === whale.address && hoveredPoint?.index === index
+                              ? "ring-1 ring-cyan-400 scale-y-125 scale-x-110 z-10"
+                              : "hover:scale-y-110"
+                          }`}
+                          onMouseEnter={() => setHoveredPoint({ address: whale.address, index, pt })}
+                          onMouseLeave={() => setHoveredPoint(null)}
+                        >
+                          {isCurrent && (
+                            <span className="absolute -top-1.5 -right-0.5 flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-80"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Detail Row helper below heatmap */}
+                  {selectedPoint && (
+                    <div className="flex items-center justify-between text-[11px] font-mono border-t border-slate-900 pt-2 px-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400 font-medium">Holdings:</span>
+                        <span className="text-slate-200 font-extrabold">
+                          {selectedPoint.amount.toLocaleString()} {whale.assetBalances[0]?.symbol || "BTC"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400 font-medium">Shift:</span>
+                        <span className={`font-black flex items-center gap-1 ${
+                          selectedPoint.percentChange > 0 ? "text-emerald-400" :
+                          selectedPoint.percentChange < 0 ? "text-rose-400" : "text-slate-400"
+                        }`}>
+                          {selectedPoint.percentChange > 0 ? "▲" : selectedPoint.percentChange < 0 ? "▼" : "•"}{" "}
+                          {Math.abs(selectedPoint.percentChange).toFixed(2)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* AI Trade Pattern Block */}
             {(() => {
@@ -524,13 +807,30 @@ export const WhaleComparisonMatrix: React.FC<WhaleComparisonMatrixProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-900">
               {networkCharacteristics.map((char) => (
-                <tr key={char.asset} className="hover:bg-slate-900/40">
+                <tr key={char.asset} className="hover:bg-slate-900/40 transition-colors">
                   <td className="py-3 font-bold text-slate-200">
                     {char.asset} <span className="text-[10px] font-normal text-slate-500">({char.type})</span>
                   </td>
-                  <td className="py-3 text-red-400 font-bold">{char.supplyConcentration}</td>
+                  <td className="py-3 pr-2">
+                    <span className={`inline-flex items-center gap-1 py-1 px-2.5 rounded transition-all duration-1000 ${
+                      recentUpdates[char.asset] 
+                        ? getFlashStyle(char.asset) 
+                        : "text-red-400 font-bold"
+                    }`}>
+                      {char.supplyConcentration}
+                      {getTrendIndicator(char.asset)}
+                    </span>
+                  </td>
                   <td className="py-3 text-slate-300">{char.avgHoldDuration}</td>
-                  <td className="py-3 text-amber-400">{char.liquidityDepth}</td>
+                  <td className="py-3 pr-2">
+                    <span className={`inline-flex items-center gap-1 py-1 px-2.5 rounded transition-all duration-1000 ${
+                      recentUpdates[char.asset] 
+                        ? getFlashStyle(char.asset) 
+                        : "text-amber-400 font-bold"
+                    }`}>
+                      {char.liquidityDepth}
+                    </span>
+                  </td>
                   <td className="py-3 text-[11px] text-slate-400 italic font-sans">{char.pattern}</td>
                 </tr>
               ))}
