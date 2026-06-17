@@ -1,4 +1,4 @@
-# 🐋 WhaleTrack Pro: Just Focus On DeFi
+# 🐋 WhaleTrack Pro: Focus On DeFi
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
@@ -57,8 +57,8 @@ Follow these instructions to set up the project locally on your machine.
 
 1. **Clone the repository**
    ```bash
-   git clone [https://github.com/12138166/WhaleTrack-Pro--Just-Focus-On-DeFi.git](https://github.com/12138166/WhaleTrack-Pro--Just-Focus-On-DeFi.git)
-   cd WhaleTrack-Pro--Just-Focus-On-DeFi
+   git clone [https://github.com/12138166/WhaleTrack-Pro-Just-Focus-On-DeFi.git](https://github.com/12138166/WhaleTrack-Pro-Focus-On-DeFi.git)
+   cd WhaleTrack-Pro-Focus-On-DeFi
 
 ```
 
@@ -109,4 +109,4 @@ Distributed under the MIT License.
 > **Disclaimer:** WhaleTrack Pro is an analytical tool built for educational and research purposes. The insights and AI-generated summaries provided by this software do NOT constitute financial, investment, or trading advice. The crypto market is highly volatile. Always Do Your Own Research (DYOR).
 
 
-*Powered by 12138166 | Just Focus On DeFi*
+*Powered by 12138166 | Focus On DeFi*
